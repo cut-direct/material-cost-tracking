@@ -244,7 +244,12 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
     })
 
     const scored = candidateMaterials
-      .map((m) => ({ material: m, score: fuzzyScore(range.name, m.description) }))
+      .map((m) => {
+        // Score against description + variantType so terms like "coloured" or
+        // "pearlescent" that live in variantType rather than description are matched.
+        const searchTarget = [m.description, m.variantType].filter(Boolean).join(' ')
+        return { material: m, score: fuzzyScore(range.name, searchTarget) }
+      })
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
 
