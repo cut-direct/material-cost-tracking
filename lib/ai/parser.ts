@@ -235,9 +235,13 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
     //    a range-level description (e.g. "Clear Acrylic") resolves every thickness.
     //    Skip any material whose description matches an exclusion word from the email.
     const exclusionWords = (range.exclusions ?? []).map((e) => e.toLowerCase())
-    const candidateMaterials = exclusionWords.length > 0
-      ? allMaterials.filter((m) => !exclusionWords.some((ex) => m.description.toLowerCase().includes(ex)))
-      : allMaterials
+    const candidateMaterials = allMaterials.filter((m) => {
+      // Skip materials with no cost set — percentage changes would resolve to £0.00
+      if (m.costPerSheet <= 0) return false
+      // Skip materials whose description matches an exclusion from the email
+      if (exclusionWords.some((ex) => m.description.toLowerCase().includes(ex))) return false
+      return true
+    })
 
     const scored = candidateMaterials
       .map((m) => ({ material: m, score: fuzzyScore(range.name, m.description) }))
