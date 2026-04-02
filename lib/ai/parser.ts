@@ -249,10 +249,26 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
 
     const scored = candidateMaterials
       .map((m) => {
-        // Score against description + variantType so terms like "coloured" or
-        // "pearlescent" that live in variantType rather than description are matched.
+        // Primary score: description + variantType combined
         const searchTarget = [m.description, m.variantType].filter(Boolean).join(' ')
-        return { material: m, score: fuzzyScore(range.name, searchTarget) }
+        const combinedScore = fuzzyScore(range.name, searchTarget)
+
+        // Bonus: if every meaningful word in variantType appears in the range name,
+        // it's a strong group-level match (e.g. range "Coloured Acrylic" contains
+        // all words of variantType "Coloured"). Boost to ensure it clears the threshold.
+        let variantBoost = 0
+        if (m.variantType) {
+          const vtWords = m.variantType.toLowerCase()
+            .split(/\s+/)
+            .map((w) => w.replace(/[^a-z0-9]/g, ''))
+            .filter((w) => w.length > 2 && !RANGE_STOP_WORDS.has(w))
+          const rangeLower = range.name.toLowerCase()
+          if (vtWords.length > 0 && vtWords.every((w) => rangeLower.includes(w))) {
+            variantBoost = 0.25
+          }
+        }
+
+        return { material: m, score: Math.min(1, combinedScore + variantBoost) }
       })
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
