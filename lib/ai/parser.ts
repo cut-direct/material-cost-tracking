@@ -158,7 +158,11 @@ function fuzzyScore(rangeName: string, materialDescription: string): number {
   if (rangeWords.length === 0) return 0
 
   const matches = rangeWords.filter((w) => descWords.some((d) => d.includes(w) || w.includes(d)))
-  return matches.length / Math.max(rangeWords.length, descWords.length)
+  // Score = fraction of the range name's meaningful words that matched.
+  // Dividing by rangeWords.length (not the max) means a short range like
+  // "Coloured Acrylic" against a long combined target "3mm Red Acrylic Cast Coloured"
+  // still scores 1.0 when both words are present, rather than being diluted to 0.4.
+  return matches.length / rangeWords.length
 }
 
 export async function parseEmail(emailBody: string): Promise<ParseResult> {
