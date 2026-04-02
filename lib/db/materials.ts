@@ -144,6 +144,14 @@ export async function bulkUpdateMaterials(changes: UpdateChange[]): Promise<{
       const effectiveDate = change.effectiveDate ? new Date(change.effectiveDate) : null
       const isFutureDated = effectiveDate && effectiveDate > today
 
+      console.log('[bulkUpdate]', {
+        materialId: change.materialId,
+        rawEffectiveDate: change.effectiveDate,
+        parsedEffectiveDate: effectiveDate?.toISOString(),
+        today: today.toISOString(),
+        isFutureDated: !!isFutureDated,
+      })
+
       if (isFutureDated) {
         // Write to staged_changes
         await prisma.stagedChange.create({
