@@ -166,12 +166,18 @@ function fuzzyScore(rangeName: string, materialDescription: string): number {
 }
 
 export async function parseEmail(emailBody: string): Promise<ParseResult> {
-  // 1. Load any user-defined context hints and append to the system prompt
+  // 1. Load any user-defined context hints and build the final system prompt.
+  //    Always inject today's date so Claude infers the correct year for relative
+  //    dates like "7th April" or "next week" (without this it defaults to 2025).
   const contextHints = await getParserContextHints()
+  const todayStr = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+  const dateNote = `\n\nTODAY'S DATE: ${todayStr}. Use this to resolve relative or partial dates (e.g. "7th April" → ${new Date().getFullYear()}-04-07, "next week" → the appropriate date). Always use the current year unless the date has clearly already passed this year.`
   const systemPrompt =
-    contextHints.length > 0
-      ? `${SYSTEM_PROMPT}\n\nADDITIONAL CONTEXT FROM CutMy TEAM:\n${contextHints.map((h, i) => `${i + 1}. ${h}`).join('\n')}`
-      : SYSTEM_PROMPT
+    SYSTEM_PROMPT +
+    dateNote +
+    (contextHints.length > 0
+      ? `\n\nADDITIONAL CONTEXT FROM CutMy TEAM:\n${contextHints.map((h, i) => `${i + 1}. ${h}`).join('\n')}`
+      : '')
 
   // 2. Call Claude to extract structured data
   const response = await getClient().messages.create({
