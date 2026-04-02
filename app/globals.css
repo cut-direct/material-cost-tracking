@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Custom Properties ───────────────────────────────────────────────── */
+:root {
+  --color-background: #F7F7F5;
+  --color-sidebar-bg: #1C1E22;
+  --color-sidebar-text: #C8CAD0;
+  --color-teal: #2DBDAA;
+  --color-topbar-border: #E5E5E3;
+  --color-table-hover: #F0F0EE;
+  --color-group-header: #EEEEEC;
+}
+
+/* ─── Base Styles ─────────────────────────────────────────────────────────── */
+html,
+body {
+  min-height: 100vh;
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Tabular Figures ─────────────────────────────────────────────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ─── Scrollbar Styling ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ─── Table Styles ────────────────────────────────────────────────────────── */
+.data-table th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6B7280;
+  white-space: nowrap;
+}
+
+.data-table td {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.data-table .cost-cell {
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ─── Sidebar Nav ─────────────────────────────────────────────────────────── */
+.sidebar-nav-item {
+  font-size: 13px;
+  font-weight: 400;
+  color: #C8CAD0;
+  position: relative;
+}
+
+.sidebar-nav-item.active {
+  color: #FFFFFF;
+}
+
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #2DBDAA;
+  border-radius: 0 2px 2px 0;
+}
+
+.sidebar-filter-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: #C8CAD0;
+}
+
+/* ─── Focus Ring ──────────────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #2DBDAA;
+  outline-offset: 2px;
+}
+
+/* ─── Transition Defaults ─────────────────────────────────────────────────── */
+.transition-default {
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+/* ─── Cost History Timeline ───────────────────────────────────────────────── */
+.history-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.history-timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: #2DBDAA;
+  opacity: 0.3;
+}
+
+.history-timeline-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #2DBDAA;
+  border: 2px solid white;
+  box-shadow: 0 0 0 2px #2DBDAA33;
+}
+
+/* ─── Inline Edit Input ───────────────────────────────────────────────────── */
+.inline-edit-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #2DBDAA;
+  outline: none;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  width: 80px;
+  padding: 0 2px;
+}
+
+/* ─── Animation ───────────────────────────────────────────────────────────── */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
+.slide-down {
+  animation: slideDown 200ms ease forwards;
+  overflow: hidden;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 200ms ease forwards;
+}

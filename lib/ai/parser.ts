@@ -1,0 +1,251 @@
+import Anthropic from '@anthropic-ai/sdk'
+import { getMaterials } from '@/lib/db/materials'
+import { resolveAliases } from '@/lib/db/supplier-aliases'
+import type { ParseResult, ResolvedChange, UnresolvedItem, ParsedRange, ConfidenceLevel } from '@/types'
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+})
+
+const SYSTEM_PROMPT = `You are a specialist data extraction assistant for CutMy, a sheet material cutting company. Your job is to parse supplier price update emails and extract structured information about price changes.
+
+CONTEXT:
+CutMy purchases sheet materials including:
+- Wood-based: MDF (plain, moisture-resistant, fire-retardant), Plywood (birch, hardwood, marine), OSB
+- Plastics: Acrylic (cast, extruded, various colours), Polycarbonate (clear, tinted), Dibond (aluminium composite)
+- Accessories: Various
+
+EXTRACTION RULES:
+1. Extract the supplier/manufacturer name(s) mentioned in the email
+2. For each product range or material type with a price change:
+   - Identify the product name/range as precisely as possible
+   - Determine if the change is a percentage (%) or absolute amount (£/currency)
+   - Extract the change value (positive = increase, negative = decrease)
+   - Find the effective date if mentioned (ISO 8601 format YYYY-MM-DD, or null if immediate/not specified)
+   - Include the raw text snippet that led to this extraction
+3. Be conservative: if something is ambiguous, mark it for review rather than guessing
+4. Common patterns:
+   - "prices will increase by X%" → percentage change
+   - "surcharge of £X per sheet" → absolute change
+   - "effective from [date]" or "from [date]" → effective date
+   - "with immediate effect" → null effective date (apply now)
+
+CONFIDENCE GUIDANCE:
+- Use exact product names and clear percentage/amount = high confidence
+- General range name with clear change = medium confidence
+- Ambiguous product reference or unclear change type = low confidence → mark as unresolved`
+
+const extractionTool: Anthropic.Tool = {
+  name: 'extract_price_changes',
+  description: 'Extract structured price change data from a supplier email',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      manufacturers: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'List of manufacturer/supplier names mentioned in the email',
+      },
+      ranges: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Product range or material name as stated in the email',
+            },
+            manufacturer: {
+              type: 'string',
+              description: 'Which manufacturer this range belongs to',
+            },
+            changeType: {
+              type: 'string',
+              enum: ['percentage', 'absolute'],
+              description: 'Whether the change is a percentage or absolute amount',
+            },
+            changeValue: {
+              type: 'number',
+              description: 'The change amount (positive = increase, negative = decrease). For percentage: 5 means 5%. For absolute: amount in £.',
+            },
+            effectiveDate: {
+              type: ['string', 'null'],
+              description: 'Effective date in YYYY-MM-DD format, or null if immediate or not specified',
+            },
+            rawText: {
+              type: 'string',
+              description: 'The exact snippet of text from the email that contains this price change',
+            },
+            confidence: {
+              type: 'string',
+              enum: ['high', 'medium', 'low'],
+              description: 'Confidence level in the extraction accuracy',
+            },
+          },
+          required: ['name', 'manufacturer', 'changeType', 'changeValue', 'effectiveDate', 'rawText', 'confidence'],
+        },
+        description: 'List of product ranges with price changes',
+      },
+    },
+    required: ['manufacturers', 'ranges'],
+  },
+}
+
+interface ExtractedRange {
+  name: string
+  manufacturer: string
+  changeType: 'percentage' | 'absolute'
+  changeValue: number
+  effectiveDate: string | null
+  rawText: string
+  confidence: ConfidenceLevel
+}
+
+interface ExtractionResult {
+  manufacturers: string[]
+  ranges: ExtractedRange[]
+}
+
+function calculateProposedCost(currentCost: number, changeType: 'percentage' | 'absolute', changeValue: number): number {
+  if (changeType === 'percentage') {
+    return Math.round((currentCost * (1 + changeValue / 100)) * 100) / 100
+  } else {
+    return Math.round((currentCost + changeValue) * 100) / 100
+  }
+}
+
+function calculateChangePercent(currentCost: number, proposedCost: number): number {
+  if (currentCost === 0) return 0
+  return Math.round(((proposedCost - currentCost) / currentCost) * 10000) / 100
+}
+
+/**
+ * Fuzzy text match — returns a score 0–1 based on how well the range name matches
+ * a material description. Higher = better match.
+ */
+function fuzzyScore(rangeName: string, materialDescription: string): number {
+  const range = rangeName.toLowerCase()
+  const desc = materialDescription.toLowerCase()
+
+  if (desc.includes(range) || range.includes(desc)) return 0.9
+
+  const rangeWords = range.split(/\s+/)
+  const descWords = desc.split(/\s+/)
+  const matches = rangeWords.filter((w) => descWords.some((d) => d.includes(w) || w.includes(d)))
+  return matches.length / Math.max(rangeWords.length, descWords.length)
+}
+
+export async function parseEmail(emailBody: string): Promise<ParseResult> {
+  // 1. Call Claude to extract structured data
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
+    system: SYSTEM_PROMPT,
+    tools: [extractionTool],
+    tool_choice: { type: 'any' },
+    messages: [
+      {
+        role: 'user',
+        content: `Please extract all price change information from this supplier email:\n\n---\n${emailBody}\n---`,
+      },
+    ],
+  })
+
+  // 2. Parse the tool use response
+  const toolUseBlock = response.content.find((block) => block.type === 'tool_use')
+  if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {
+    return {
+      resolved: [],
+      unresolved: [],
+      manufacturers: [],
+      parseTimestamp: new Date().toISOString(),
+    }
+  }
+
+  const extracted = toolUseBlock.input as ExtractionResult
+
+  // 3. Load all materials and known aliases
+  const [allMaterials, aliasMap] = await Promise.all([
+    getMaterials(),
+    resolveAliases(extracted.ranges.map((r) => r.name)),
+  ])
+
+  const resolved: ResolvedChange[] = []
+  const unresolved: UnresolvedItem[] = []
+
+  // 4. Try to match each extracted range to a material
+  for (const range of extracted.ranges) {
+    const knownMaterialId = aliasMap[range.name]
+
+    if (knownMaterialId) {
+      // Direct alias match → high confidence
+      const material = allMaterials.find((m) => m.id === knownMaterialId)
+      if (material) {
+        const proposedCost = calculateProposedCost(material.costPerSheet, range.changeType, range.changeValue)
+        resolved.push({
+          materialId: material.id,
+          materialDescription: material.description,
+          currentCost: material.costPerSheet,
+          proposedCost,
+          changePercent: calculateChangePercent(material.costPerSheet, proposedCost),
+          effectiveDate: range.effectiveDate,
+          confidence: 'high',
+          rawText: range.rawText,
+          aliasRawText: range.name,
+          supplier: material.supplier?.name,
+        })
+        continue
+      }
+    }
+
+    // 5. Fuzzy match against all materials
+    const scored = allMaterials
+      .map((m) => ({ material: m, score: fuzzyScore(range.name, m.description) }))
+      .filter((s) => s.score > 0.3)
+      .sort((a, b) => b.score - a.score)
+
+    if (scored.length > 0 && scored[0].score > 0.6) {
+      const best = scored[0].material
+      const confidence: ConfidenceLevel = scored[0].score > 0.8 ? 'high' : 'medium'
+      const proposedCost = calculateProposedCost(best.costPerSheet, range.changeType, range.changeValue)
+      resolved.push({
+        materialId: best.id,
+        materialDescription: best.description,
+        currentCost: best.costPerSheet,
+        proposedCost,
+        changePercent: calculateChangePercent(best.costPerSheet, proposedCost),
+        effectiveDate: range.effectiveDate,
+        confidence,
+        rawText: range.rawText,
+        aliasRawText: range.name,
+        supplier: best.supplier?.name,
+      })
+    } else {
+      // Cannot resolve
+      const parsedRange: ParsedRange = {
+        name: range.name,
+        manufacturer: range.manufacturer,
+        changeType: range.changeType,
+        changeValue: range.changeValue,
+        effectiveDate: range.effectiveDate,
+        rawText: range.rawText,
+      }
+      unresolved.push({
+        rawText: range.rawText,
+        parsedRange,
+        suggestedMaterials: scored.slice(0, 3).map((s) => ({
+          id: s.material.id,
+          description: s.material.description,
+          score: s.score,
+        })),
+      })
+    }
+  }
+
+  return {
+    resolved,
+    unresolved,
+    manufacturers: extracted.manufacturers,
+    parseTimestamp: new Date().toISOString(),
+  }
+}

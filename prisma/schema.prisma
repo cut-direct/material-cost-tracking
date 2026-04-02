@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  materials Material[]
+  aliases   SupplierAlias[]
+
+  @@map("suppliers")
+}
+
+model Material {
+  id           String   @id @default(cuid())
+  description  String
+  category     String   // e.g. "Wood", "Plastic", "Accessories"
+  typeFinish   String   @map("type_finish") // e.g. "MDF", "Plywood", "Acrylic"
+  thicknessMm  Decimal  @map("thickness_mm") @db.Decimal(6, 2)
+  widthMm      Decimal  @map("width_mm") @db.Decimal(8, 2)
+  heightMm     Decimal  @map("height_mm") @db.Decimal(8, 2)
+  supplierId   String   @map("supplier_id")
+  costPerSheet Decimal  @map("cost_per_sheet") @db.Decimal(10, 2)
+  updateSource String   @default("manual") @map("update_source") // "manual" | "email-parse" | "import"
+  lastUpdatedAt DateTime @default(now()) @map("last_updated_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Magento integration fields
+  magentoSku        String?  @unique @map("magento_sku")
+  magentoName       String?  @map("magento_name")
+  magentoEntityId   Int?     @unique @map("magento_entity_id")
+  variantType       String?  @map("variant_type") // e.g. "Kronospan", "FINSA 12Twenty"
+
+  supplier      Supplier        @relation(fields: [supplierId], references: [id])
+  costHistory   CostHistory[]
+  stagedChanges StagedChange[]
+
+  @@index([category])
+  @@index([typeFinish])
+  @@index([supplierId])
+  @@index([magentoSku])
+  @@map("materials")
+}
+
+model CostHistory {
+  id           String   @id @default(cuid())
+  materialId   String   @map("material_id")
+  previousCost Decimal  @map("previous_cost") @db.Decimal(10, 2)
+  newCost      Decimal  @map("new_cost") @db.Decimal(10, 2)
+  changedAt    DateTime @default(now()) @map("changed_at")
+  updateSource String   @map("update_source") // "manual" | "email-parse" | "import" | "staged"
+  notes        String?
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId])
+  @@index([changedAt])
+  @@map("cost_history")
+}
+
+model StagedChange {
+  id            String   @id @default(cuid())
+  materialId    String   @map("material_id")
+  proposedCost  Decimal  @map("proposed_cost") @db.Decimal(10, 2)
+  currentCost   Decimal  @map("current_cost") @db.Decimal(10, 2)
+  effectiveDate DateTime @map("effective_date")
+  updateSource  String   @default("email-parse") @map("update_source")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([effectiveDate])
+  @@index([materialId])
+  @@map("staged_changes")
+}
+
+model SupplierAlias {
+  id         String   @id @default(cuid())
+  rawText    String   @unique @map("raw_text")
+  materialId String   @map("material_id")
+  supplierId String?  @map("supplier_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@index([rawText])
+  @@map("supplier_aliases")
+}

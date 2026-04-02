@@ -1,0 +1,202 @@
+import { prisma } from './prisma'
+import type { Material, MaterialFilters, UpdateChange } from '@/types'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function deriveCostPerM2(costPerSheet: number, widthMm: number, heightMm: number): number {
+  return (costPerSheet / (widthMm * heightMm)) * 1_000_000
+}
+
+function serializeMaterial(m: {
+  id: string
+  description: string
+  category: string
+  typeFinish: string
+  thicknessMm: { toNumber(): number }
+  widthMm: { toNumber(): number }
+  heightMm: { toNumber(): number }
+  supplierId: string
+  costPerSheet: { toNumber(): number }
+  updateSource: string
+  lastUpdatedAt: Date
+  createdAt: Date
+  updatedAt: Date
+  magentoSku: string | null
+  magentoName: string | null
+  magentoEntityId: number | null
+  variantType: string | null
+  supplier?: { id: string; name: string; createdAt: Date; updatedAt: Date }
+}): Material {
+  const costPerSheet = m.costPerSheet.toNumber()
+  const widthMm = m.widthMm.toNumber()
+  const heightMm = m.heightMm.toNumber()
+
+  return {
+    id: m.id,
+    description: m.description,
+    category: m.category,
+    typeFinish: m.typeFinish,
+    thicknessMm: m.thicknessMm.toNumber(),
+    widthMm,
+    heightMm,
+    supplierId: m.supplierId,
+    costPerSheet,
+    updateSource: m.updateSource as Material['updateSource'],
+    lastUpdatedAt: m.lastUpdatedAt.toISOString(),
+    createdAt: m.createdAt.toISOString(),
+    updatedAt: m.updatedAt.toISOString(),
+    magentoSku: m.magentoSku,
+    magentoName: m.magentoName,
+    magentoEntityId: m.magentoEntityId,
+    variantType: m.variantType,
+    costPerM2: deriveCostPerM2(costPerSheet, widthMm, heightMm),
+    supplier: m.supplier
+      ? {
+          id: m.supplier.id,
+          name: m.supplier.name,
+          createdAt: m.supplier.createdAt.toISOString(),
+          updatedAt: m.supplier.updatedAt.toISOString(),
+        }
+      : undefined,
+  }
+}
+
+// ─── Queries ──────────────────────────────────────────────────────────────────
+
+export async function getMaterials(filters?: MaterialFilters): Promise<Material[]> {
+  const where: {
+    category?: string
+    typeFinish?: string
+    supplierId?: string
+    OR?: Array<{ description?: { contains: string; mode: 'insensitive' } | { contains: string } }>
+  } = {}
+
+  if (filters?.category) where.category = filters.category
+  if (filters?.typeFinish) where.typeFinish = filters.typeFinish
+  if (filters?.supplierId) where.supplierId = filters.supplierId
+  if (filters?.search) {
+    where.OR = [
+      { description: { contains: filters.search, mode: 'insensitive' } },
+    ]
+  }
+
+  const materials = await prisma.material.findMany({
+    where,
+    include: { supplier: true },
+    orderBy: [{ category: 'asc' }, { typeFinish: 'asc' }, { thicknessMm: 'asc' }],
+  })
+
+  return materials.map(serializeMaterial)
+}
+
+export async function getMaterialById(id: string): Promise<Material | null> {
+  const material = await prisma.material.findUnique({
+    where: { id },
+    include: { supplier: true },
+  })
+
+  if (!material) return null
+  return serializeMaterial(material)
+}
+
+export async function getCostHistory(materialId: string) {
+  const history = await prisma.costHistory.findMany({
+    where: { materialId },
+    orderBy: { changedAt: 'desc' },
+  })
+
+  return history.map((h) => ({
+    id: h.id,
+    materialId: h.materialId,
+    previousCost: h.previousCost.toNumber(),
+    newCost: h.newCost.toNumber(),
+    changedAt: h.changedAt.toISOString(),
+    updateSource: h.updateSource as Material['updateSource'],
+    notes: h.notes,
+  }))
+}
+
+// ─── Mutations ────────────────────────────────────────────────────────────────
+
+export async function bulkUpdateMaterials(changes: UpdateChange[]): Promise<{
+  updated: number
+  staged: number
+  errors: Array<{ materialId: string; error: string }>
+}> {
+  let updated = 0
+  let staged = 0
+  const errors: Array<{ materialId: string; error: string }> = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  for (const change of changes) {
+    try {
+      const material = await prisma.material.findUnique({
+        where: { id: change.materialId },
+      })
+
+      if (!material) {
+        errors.push({ materialId: change.materialId, error: 'Material not found' })
+        continue
+      }
+
+      const effectiveDate = change.effectiveDate ? new Date(change.effectiveDate) : null
+      const isFutureDated = effectiveDate && effectiveDate > today
+
+      if (isFutureDated) {
+        // Write to staged_changes
+        await prisma.stagedChange.create({
+          data: {
+            materialId: change.materialId,
+            proposedCost: change.proposedCost,
+            currentCost: material.costPerSheet,
+            effectiveDate: effectiveDate,
+            updateSource: change.updateSource ?? 'email-parse',
+            notes: change.notes,
+          },
+        })
+        staged++
+      } else {
+        // Immediate update — use a transaction
+        await prisma.$transaction([
+          prisma.material.update({
+            where: { id: change.materialId },
+            data: {
+              costPerSheet: change.proposedCost,
+              updateSource: change.updateSource ?? 'email-parse',
+              lastUpdatedAt: new Date(),
+            },
+          }),
+          prisma.costHistory.create({
+            data: {
+              materialId: change.materialId,
+              previousCost: material.costPerSheet,
+              newCost: change.proposedCost,
+              updateSource: change.updateSource ?? 'email-parse',
+              notes: change.notes,
+            },
+          }),
+        ])
+        updated++
+      }
+
+      // Save alias if provided
+      if (change.aliasRawText) {
+        await prisma.supplierAlias.upsert({
+          where: { rawText: change.aliasRawText },
+          update: { materialId: change.materialId },
+          create: {
+            rawText: change.aliasRawText,
+            materialId: change.materialId,
+            supplierId: material.supplierId,
+          },
+        })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      errors.push({ materialId: change.materialId, error: message })
+    }
+  }
+
+  return { updated, staged, errors }
+}
