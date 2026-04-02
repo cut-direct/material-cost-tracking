@@ -222,6 +222,7 @@ export function MaterialsTable({ initialData, filters }: MaterialsTableProps) {
                 />
               </th>
               <th className="text-left px-4 py-3 text-gray-500 w-[250px]">Description</th>
+              <th className="text-left px-4 py-3 text-gray-500 w-[160px]">Variant Type</th>
               <th className="text-left px-4 py-3 text-gray-500 w-[160px]">Magento SKU</th>
               <th className="text-left px-4 py-3 text-gray-500 w-[90px]">Thickness</th>
               <th className="text-left px-4 py-3 text-gray-500 w-[130px]">Sheet Size</th>
@@ -236,7 +237,7 @@ export function MaterialsTable({ initialData, filters }: MaterialsTableProps) {
           <tbody>
             {groups.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={12} className="px-4 py-12 text-center text-sm text-gray-400">
                   No materials found
                 </td>
               </tr>
@@ -276,7 +277,7 @@ function GroupRows({
     <>
       {/* Group header row */}
       <tr style={{ backgroundColor: '#EEEEEC' }}>
-        <td colSpan={11} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+        <td colSpan={12} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
           {group.category} — {group.typeFinish}
           <span className="ml-2 font-normal normal-case tracking-normal text-gray-400">
             ({group.materials.length})
@@ -322,6 +323,13 @@ function GroupRows({
                 {material.description}
               </td>
               <td className="px-4 py-3">
+                {material.variantType ? (
+                  <span className="text-[12px] text-gray-600">{material.variantType}</span>
+                ) : (
+                  <span className="text-[12px] text-gray-300">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3">
                 {material.magentoSku ? (
                   <span className="font-mono text-[12px] text-gray-400">{material.magentoSku}</span>
                 ) : (
@@ -364,7 +372,7 @@ function GroupRows({
 
             {isExpanded && (
               <tr>
-                <td colSpan={11} className="p-0 border-b border-[#E5E5E3]">
+                <td colSpan={12} className="p-0 border-b border-[#E5E5E3]">
                   <div className="slide-down">
                     <CostHistoryPanel
                       materialId={material.id}
