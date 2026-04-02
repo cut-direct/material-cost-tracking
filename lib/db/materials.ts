@@ -200,3 +200,8 @@ export async function bulkUpdateMaterials(changes: UpdateChange[]): Promise<{
 
   return { updated, staged, errors }
 }
+
+export async function deleteMaterials(ids: string[]): Promise<{ deleted: number }> {
+  const result = await prisma.material.deleteMany({ where: { id: { in: ids } } })
+  return { deleted: result.count }
+}
