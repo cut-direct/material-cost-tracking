@@ -80,186 +80,75 @@ function materialToCategory(material: string): string {
   return MATERIAL_CATEGORY_MAP[material.toLowerCase()] ?? 'Accessories'
 }
 
-// ─── Supplier Upsert ──────────────────────────────────────────────────────────
+// ─── Supplier Batch Processing ──────────────────────────────────────────────────
 
-async function upsertSupplier(name: string): Promise<string> {
-  const supplier = await prisma.supplier.upsert({
-    where: { name },
-    update: {},
-    create: { name },
-  })
-  return supplier.id
-}
+// ─── Format parsers ──────────────────────────────────────────────────────────
 
-// ─── Format A Import (Metabase export) ───────────────────────────────────────
-//
-// Expected columns (add these to your Metabase report):
-//   entity_id, Variant Name, sku, Cost, Cost_Width, Cost_Length, Thickness,
-//   Material, Type, Variant_Type
-//
-// - Material  → category + typeFinish (e.g. "MDF", "Plywood", "Acrylic")
-// - Type      → overrides typeFinish if present (e.g. "Standard", "Premium")
-// - Variant Name → description
-// - Variant_Type → brand/range stored in variantType (e.g. "Kronospan")
-// - Supplier is not in Magento data — defaults to "Unassigned" (assign later)
-
-async function importMetabaseRow(
-  row: Record<string, string>,
-  rowIndex: number,
-  result: ImportResult,
-): Promise<void> {
-  const sku = row['sku']?.trim() ?? ''
-  if (!sku) {
-    result.skipped++
-    return
-  }
-
+function parseMetabaseRow(row: Record<string, string>, supplierId: string) {
   const entityIdRaw = row['entity_id']?.trim().replace(/,/g, '') ?? ''
   const magentoEntityId = entityIdRaw ? parseInt(entityIdRaw, 10) : null
 
-  // Prefer "Variant Name" over legacy "Name" column
-  const variantName = row['Variant Name']?.trim() || row['Name']?.trim() || sku
+  const variantName = row['Variant Name']?.trim() || row['Name']?.trim() || row['sku']?.trim()
   const magentoName = variantName
 
   const materialAttr = row['Material']?.trim() || row['Attribute_Set']?.trim() || ''
   const typeAttr = row['Type']?.trim() || ''
   const variantType = row['Variant_Type']?.trim() || null
 
-  // category comes from Material attribute, never from SKU
   const category = materialAttr ? materialToCategory(materialAttr) : 'Accessories'
-
-  // typeFinish: use Type attribute if present, otherwise use Material value directly
   const typeFinish = typeAttr || materialAttr || 'Other'
-
-  // description = Variant Name (the human-readable product name)
-  const description = variantName
+  const description = variantName ?? ''
 
   const thicknessRaw = (row['Thickness']?.trim() ?? '0').replace(/mm$/i, '')
   const thicknessMm = parseFloat(thicknessRaw) || 0
-
   const widthMm = parseFloat(row['Cost_Width']?.trim() ?? '0') || 0
   const heightMm = parseFloat(row['Cost_Length']?.trim() ?? '0') || 0
   const costPerSheet = parseFloat(row['Cost']?.trim() ?? '0') || 0
 
-  // Supplier not available in Magento data — use Unassigned as placeholder
-  const supplierId = await upsertSupplier('Unassigned')
-
-  const existing = await prisma.material.findUnique({ where: { magentoSku: sku } })
-
-  try {
-    if (existing) {
-      await prisma.material.update({
-        where: { magentoSku: sku },
-        data: {
-          costPerSheet,
-          magentoEntityId,
-          magentoName,
-          variantType,
-          description,
-          category,
-          typeFinish,
-          thicknessMm,
-          widthMm,
-          heightMm,
-          updateSource: 'import',
-          lastUpdatedAt: new Date(),
-        },
-      })
-      result.updated++
-    } else {
-      await prisma.material.create({
-        data: {
-          description,
-          category,
-          typeFinish,
-          thicknessMm,
-          widthMm,
-          heightMm,
-          supplierId,
-          costPerSheet,
-          updateSource: 'import',
-          lastUpdatedAt: new Date(),
-          magentoSku: sku,
-          magentoName,
-          magentoEntityId,
-          variantType,
-        },
-      })
-      result.imported++
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    result.errors.push({ row: rowIndex, sku, error: message })
+  return {
+    description,
+    category,
+    typeFinish,
+    thicknessMm,
+    widthMm,
+    heightMm,
+    supplierId,
+    costPerSheet,
+    updateSource: 'import',
+    lastUpdatedAt: new Date(),
+    magentoName,
+    magentoEntityId,
+    variantType,
   }
 }
 
-// ─── Format B Import (Template format) ───────────────────────────────────────
-
-async function importTemplateRow(
-  row: Record<string, string>,
-  rowIndex: number,
-  result: ImportResult,
-): Promise<void> {
-  const sku = row['magento_sku']?.trim() ?? ''
-  if (!sku) {
-    result.skipped++
-    return
-  }
-
+function parseTemplateRow(row: Record<string, string>, supplierId: string) {
   const magentoName = row['magento_name']?.trim() || null
   const magentoEntityIdRaw = row['magento_entity_id']?.trim() ?? ''
   const magentoEntityId = magentoEntityIdRaw ? parseInt(magentoEntityIdRaw, 10) : null
   const category = row['category']?.trim() || 'Accessories'
   const typeFinish = row['type_finish']?.trim() || 'Other'
-  const description = row['description']?.trim() || sku
+  const description = row['description']?.trim() || row['magento_sku']?.trim() || ''
   const thicknessMm = parseFloat(row['thickness_mm']?.trim() ?? '0') || 0
   const widthMm = parseFloat(row['width_mm']?.trim() ?? '0') || 0
   const heightMm = parseFloat(row['height_mm']?.trim() ?? '0') || 0
   const costPerSheet = parseFloat(row['cost_per_sheet']?.trim() ?? '0') || 0
-  const supplierName = row['supplier']?.trim() || 'Unassigned'
   const variantType = row['variant_type']?.trim() || null
 
-  const supplierId = await upsertSupplier(supplierName)
-  const existing = await prisma.material.findUnique({ where: { magentoSku: sku } })
-
-  try {
-    if (existing) {
-      await prisma.material.update({
-        where: { magentoSku: sku },
-        data: {
-          costPerSheet,
-          magentoEntityId,
-          magentoName,
-          variantType,
-          updateSource: 'import',
-          lastUpdatedAt: new Date(),
-        },
-      })
-      result.updated++
-    } else {
-      await prisma.material.create({
-        data: {
-          description,
-          category,
-          typeFinish,
-          thicknessMm,
-          widthMm,
-          heightMm,
-          supplierId,
-          costPerSheet,
-          updateSource: 'import',
-          lastUpdatedAt: new Date(),
-          magentoSku: sku,
-          magentoName,
-          magentoEntityId,
-          variantType,
-        },
-      })
-      result.imported++
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    result.errors.push({ row: rowIndex, sku, error: message })
+  return {
+    description,
+    category,
+    typeFinish,
+    thicknessMm,
+    widthMm,
+    heightMm,
+    supplierId,
+    costPerSheet,
+    updateSource: 'import',
+    lastUpdatedAt: new Date(),
+    magentoName,
+    magentoEntityId,
+    variantType,
   }
 }
 
@@ -283,19 +172,119 @@ export async function importMaterialsFromCsv(csvText: string): Promise<ImportRes
     return result
   }
 
+  // 1. Gather all unique supplier names
+  const uniqueSupplierNames = new Set<string>()
+  for (const row of rows) {
+    if (isMetabase) {
+      uniqueSupplierNames.add('Unassigned')
+    } else {
+      uniqueSupplierNames.add(row['supplier']?.trim() || 'Unassigned')
+    }
+  }
+
+  // 2. Fetch existing suppliers and create missing ones
+  const supplierNamesArr = Array.from(uniqueSupplierNames)
+  let existingSuppliers = await prisma.supplier.findMany({
+    where: { name: { in: supplierNamesArr } }
+  })
+  const supplierMap = new Map<string, string>(existingSuppliers.map(s => [s.name, s.id]))
+  
+  const missingSuppliers = supplierNamesArr.filter(name => !supplierMap.has(name))
+  if (missingSuppliers.length > 0) {
+    await prisma.supplier.createMany({
+      data: missingSuppliers.map(name => ({ name })),
+      skipDuplicates: true,
+    })
+    // Re-fetch all suppliers to get their new IDs
+    existingSuppliers = await prisma.supplier.findMany({
+      where: { name: { in: supplierNamesArr } }
+    })
+    for (const s of existingSuppliers) {
+      supplierMap.set(s.name, s.id)
+    }
+  }
+
+  // 3. Collect valid rows and extract SKUs
+  const validRows: Array<{ row: Record<string, string>, rowIndex: number, sku: string }> = []
+  const skus: string[] = []
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
+    const sku = isMetabase ? row['sku']?.trim() ?? '' : row['magento_sku']?.trim() ?? ''
+    if (!sku) {
+      result.skipped++
+      continue
+    }
+    validRows.push({ row, rowIndex: i + 2, sku })
+    skus.push(sku)
+  }
+
+  if (validRows.length === 0) return result
+
+  // 4. Determine which SKUs already exist in the database
+  const existingMaterials = await prisma.material.findMany({
+    where: { magentoSku: { in: skus } }
+  })
+  const existingSkuSet = new Set(existingMaterials.map(m => m.magentoSku))
+
+  // 5. Build up arrays of operations
+  const creates: any[] = []
+  const updates: Array<{ sku: string, rowIndex: number, data: any }> = []
+
+  for (const { row, rowIndex, sku } of validRows) {
     try {
-      if (isMetabase) {
-        await importMetabaseRow(row, i + 2, result)
+      const supplierName = isMetabase ? 'Unassigned' : (row['supplier']?.trim() || 'Unassigned')
+      const supplierId = supplierMap.get(supplierName) || ''
+
+      const parsedData = isMetabase 
+        ? parseMetabaseRow(row, supplierId) 
+        : parseTemplateRow(row, supplierId)
+
+      if (existingSkuSet.has(sku)) {
+        updates.push({ sku, rowIndex, data: parsedData })
       } else {
-        await importTemplateRow(row, i + 2, result)
+        creates.push({ ...parsedData, magentoSku: sku })
       }
     } catch (err) {
-      const sku = isMetabase ? (row['sku'] ?? '') : (row['magento_sku'] ?? '')
       const message = err instanceof Error ? err.message : 'Unknown error'
-      result.errors.push({ row: i + 2, sku, error: message })
+      result.errors.push({ row: rowIndex, sku, error: message })
     }
+  }
+
+  // 6. Execute Creates in bulk
+  if (creates.length > 0) {
+    try {
+      await prisma.material.createMany({
+        data: creates,
+        skipDuplicates: true,
+      })
+      result.imported = creates.length
+    } catch (err) {
+      result.errors.push({
+        row: 0,
+        sku: 'bulk-create',
+        error: `Bulk insert failed: ${err instanceof Error ? err.message : String(err)}`
+      })
+    }
+  }
+
+  // 7. Execute Updates in chunks to avoid connection limits / large transactions
+  // They are executed individually but in parallel groups
+  const chunkSize = 20
+  for (let i = 0; i < updates.length; i += chunkSize) {
+    const chunk = updates.slice(i, i + chunkSize)
+    await Promise.all(chunk.map(async (u) => {
+      try {
+        await prisma.material.update({
+          where: { magentoSku: u.sku },
+          data: u.data,
+        })
+        result.updated++
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        result.errors.push({ row: u.rowIndex, sku: u.sku, error: message })
+      }
+    }))
   }
 
   return result

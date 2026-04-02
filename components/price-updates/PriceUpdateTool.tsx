@@ -190,16 +190,25 @@ export function PriceUpdateTool() {
         )}
 
         {commitResult && (
-          <div className="bg-[#E6F4F1] border border-[#2DBDAA]/30 rounded-xl p-4">
+          <div className={`rounded-xl p-4 border ${commitResult.errors.length > 0 ? 'bg-red-50 border-red-200' : 'bg-[#E6F4F1] border-[#2DBDAA]/30'}`}>
             <div className="flex items-start gap-2">
-              <CheckCircle size={15} className="text-[#2DBDAA] mt-0.5 shrink-0" />
-              <div>
-                <p className="text-[13px] font-medium text-[#1A5C52]">Changes committed</p>
-                <p className="text-[12px] text-[#2A7A6E] mt-0.5">
+              <CheckCircle size={15} className={`mt-0.5 shrink-0 ${commitResult.errors.length > 0 ? 'text-red-400' : 'text-[#2DBDAA]'}`} />
+              <div className="flex-1">
+                <p className={`text-[13px] font-medium ${commitResult.errors.length > 0 ? 'text-red-700' : 'text-[#1A5C52]'}`}>Changes committed</p>
+                <p className={`text-[12px] mt-0.5 ${commitResult.errors.length > 0 ? 'text-red-600' : 'text-[#2A7A6E]'}`}>
                   {commitResult.updated} updated immediately
                   {commitResult.staged > 0 && `, ${commitResult.staged} staged for later`}
                   {commitResult.errors.length > 0 && `, ${commitResult.errors.length} error(s)`}
                 </p>
+                {commitResult.errors.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {commitResult.errors.map((e, i) => (
+                      <li key={i} className="text-[11px] text-red-600 font-mono bg-red-100 rounded px-2 py-1">
+                        {e.materialId.slice(0, 8)}…: {e.error}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </div>
