@@ -3,10 +3,11 @@ import { cancelStagedChange } from '@/lib/db/staged-changes'
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await cancelStagedChange(params.id)
+    const { id } = await params
+    await cancelStagedChange(id)
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
     console.error('[DELETE /api/staged-changes/[id]]', error)
