@@ -50,7 +50,7 @@ function PriceChart({ history }: { history: CostHistory[] }) {
   return (
     <div className="mb-6 -mx-6 px-6 pt-2 pb-5 border-b border-[#E5E5E3]">
       <ResponsiveContainer width="100%" height={160}>
-        <AreaChart data={points} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <AreaChart data={points} margin={{ top: 4, right: 48, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%"  stopColor="#2DBDAA" stopOpacity={0.15} />
@@ -63,18 +63,18 @@ function PriceChart({ history }: { history: CostHistory[] }) {
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
+            tick={{ fontSize: 10, fill: '#9CA3AF', fontFamily: 'inherit', textRendering: 'geometricPrecision' }}
             tickFormatter={(v) => format(new Date(v), 'd MMM yy')}
-            tick={{ fontSize: 10, fill: '#9CA3AF' }}
             tickLine={false}
             axisLine={false}
             minTickGap={40}
           />
           <YAxis
-            domain={[minCost - pad, maxCost + pad]}
+            domain={[Math.max(0, minCost - pad), maxCost + pad]}
             tickFormatter={(v) =>
               new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v)
             }
-            tick={{ fontSize: 10, fill: '#9CA3AF' }}
+            tick={{ fontSize: 10, fill: '#9CA3AF', fontFamily: 'inherit' }}
             tickLine={false}
             axisLine={false}
             width={64}
@@ -166,7 +166,7 @@ export function CostHistoryPanel({ materialId, materialDescription }: CostHistor
       )}
 
       {data && data.length > 0 && (
-        <div className="history-timeline">
+        <div className="history-timeline max-h-56 overflow-y-auto pr-1">
           {data.map((entry, idx) => {
             const changeAmount = entry.newCost - entry.previousCost
             const changePercent = entry.previousCost > 0
