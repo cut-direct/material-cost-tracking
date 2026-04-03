@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, 
 import { SearchInput } from '@/components/ui/SearchInput'
 import { CostHistoryPanel } from './CostHistoryPanel'
 import { ImportDialog } from './ImportDialog'
+import { AddVariantDialog } from './AddVariantDialog'
 import type { Material, MaterialFilters, MaterialGroup } from '@/types'
 
 interface MaterialsTableProps {
@@ -167,6 +168,10 @@ export function MaterialsTable({ initialData, filters: externalFilters }: Materi
     [allMaterials, filterCategory])
   const suppliers = useMemo(() =>
     [...new Set((allMaterials ?? []).map((m) => m.supplier?.name).filter(Boolean) as string[])].sort(), [allMaterials])
+  const thicknesses = useMemo(() =>
+    [...new Set((allMaterials ?? []).map((m) => String(m.thicknessMm)))].sort((a, b) => parseFloat(a) - parseFloat(b)), [allMaterials])
+  const variantTypes = useMemo(() =>
+    [...new Set((allMaterials ?? []).map((m) => m.variantType).filter(Boolean) as string[])].sort(), [allMaterials])
 
   // Apply client-side filters then sort
   const materials = useMemo(() => {
@@ -315,7 +320,15 @@ export function MaterialsTable({ initialData, filters: externalFilters }: Materi
                 </button>
               </>
             )}
-            <ImportDialog onSuccess={handleImportSuccess} />
+            <AddVariantDialog
+            categories={categories}
+            typeFinishes={typeFinishes}
+            variantTypes={variantTypes}
+            thicknesses={thicknesses}
+            suppliers={suppliers}
+            onSuccess={handleImportSuccess}
+          />
+          <ImportDialog onSuccess={handleImportSuccess} />
           </div>
         </div>
 
@@ -384,15 +397,16 @@ export function MaterialsTable({ initialData, filters: externalFilters }: Materi
               <SortTh col="supplier"      label="Supplier"      activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-left w-[130px]" />
               <SortTh col="costPerSheet"  label="Cost/Sheet"    activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-right w-[110px]" />
               <th className="text-right px-4 py-3 text-gray-500 w-[110px]">Cost/m²</th>
-              <SortTh col="lastUpdatedAt" label="Last Updated"  activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-left w-[120px]" />
+              <SortTh col="lastUpdatedAt" label="Cost Updated"  activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-left w-[120px]" />
               <th className="text-left px-4 py-3 text-gray-500 w-[80px]">Source</th>
+              <th className="text-left px-4 py-3 text-gray-500 w-[70px]">Pending</th>
               <th className="w-8" />
             </tr>
           </thead>
           <tbody>
             {groups.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-12 text-center text-sm text-gray-400">No materials found</td>
+                <td colSpan={13} className="px-4 py-12 text-center text-sm text-gray-400">No materials found</td>
               </tr>
             )}
             {groups.map((group) => (
@@ -430,7 +444,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
   return (
     <>
       <tr style={{ backgroundColor: '#EEEEEC' }}>
-        <td colSpan={12} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+        <td colSpan={13} className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
           {group.category} — {group.typeFinish}
           <span className="ml-2 font-normal normal-case tracking-normal text-gray-400">({group.materials.length})</span>
         </td>
@@ -488,6 +502,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                 <td className="px-4 py-2 text-right text-[13px] text-gray-400">—</td>
                 <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
                 <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
+                <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-2">
                     <button
@@ -539,12 +554,21 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                   <span className="cost-cell tabular-nums text-gray-500">{formatM2Cost(material.costPerM2)}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <time dateTime={material.lastUpdatedAt} title={format(lastUpdated, 'dd MMM yyyy HH:mm')} className="text-[13px] text-gray-500">
-                    {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-                  </time>
+                  {material.lastCostUpdatedAt ? (
+                    <time dateTime={material.lastCostUpdatedAt} title={format(new Date(material.lastCostUpdatedAt), 'dd MMM yyyy HH:mm')} className="text-[13px] text-gray-500">
+                      {formatDistanceToNow(new Date(material.lastCostUpdatedAt), { addSuffix: true })}
+                    </time>
+                  ) : (
+                    <span className="text-[13px] text-gray-300">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-[12px] text-gray-400">{sourceLabel(material.updateSource)}</span>
+                </td>
+                <td className="px-4 py-3">
+                  {material.hasPendingChange
+                    ? <span className="text-[12px] font-medium text-[#2DBDAA]">Yes</span>
+                    : <span className="text-[12px] text-gray-300">No</span>}
                 </td>
                 <td className="px-4 py-3 text-gray-400">
                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -554,7 +578,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
 
             {isExpanded && !isEditing && (
               <tr>
-                <td colSpan={12} className="p-0 border-b border-[#E5E5E3]">
+                <td colSpan={13} className="p-0 border-b border-[#E5E5E3]">
                   <div className="slide-down">
                     <CostHistoryPanel materialId={material.id} materialDescription={material.description} />
                   </div>

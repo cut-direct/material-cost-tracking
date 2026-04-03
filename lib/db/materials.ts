@@ -26,6 +26,8 @@ function serializeMaterial(m: {
   magentoEntityId: number | null
   variantType: string | null
   supplier?: { id: string; name: string; createdAt: Date; updatedAt: Date }
+  costHistory?: { changedAt: Date }[]
+  _count?: { stagedChanges: number }
 }): Material {
   const costPerSheet = m.costPerSheet.toNumber()
   const widthMm = m.widthMm.toNumber()
@@ -50,6 +52,8 @@ function serializeMaterial(m: {
     magentoEntityId: m.magentoEntityId,
     variantType: m.variantType,
     costPerM2: deriveCostPerM2(costPerSheet, widthMm, heightMm),
+    lastCostUpdatedAt: m.costHistory?.[0]?.changedAt.toISOString() ?? null,
+    hasPendingChange: (m._count?.stagedChanges ?? 0) > 0,
     supplier: m.supplier
       ? {
           id: m.supplier.id,
@@ -82,7 +86,11 @@ export async function getMaterials(filters?: MaterialFilters): Promise<Material[
 
   const materials = await prisma.material.findMany({
     where,
-    include: { supplier: true },
+    include: {
+      supplier: true,
+      costHistory: { orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } },
+      _count: { select: { stagedChanges: true } },
+    },
     orderBy: [{ category: 'asc' }, { typeFinish: 'asc' }, { thicknessMm: 'asc' }],
   })
 
@@ -214,6 +222,44 @@ export async function bulkUpdateMaterials(changes: UpdateChange[]): Promise<{
 export async function deleteMaterials(ids: string[]): Promise<{ deleted: number }> {
   const result = await prisma.material.deleteMany({ where: { id: { in: ids } } })
   return { deleted: result.count }
+}
+
+export async function createMaterial(data: {
+  description: string
+  category: string
+  typeFinish: string
+  thicknessMm: number
+  widthMm: number
+  heightMm: number
+  supplierName: string
+  costPerSheet: number
+  variantType?: string | null
+  magentoSku?: string | null
+}): Promise<Material> {
+  const supplier = await prisma.supplier.upsert({
+    where: { name: data.supplierName },
+    update: {},
+    create: { name: data.supplierName },
+  })
+
+  const material = await prisma.material.create({
+    data: {
+      description:  data.description,
+      category:     data.category,
+      typeFinish:   data.typeFinish,
+      thicknessMm:  data.thicknessMm,
+      widthMm:      data.widthMm,
+      heightMm:     data.heightMm,
+      supplierId:   supplier.id,
+      costPerSheet: data.costPerSheet,
+      variantType:  data.variantType || null,
+      magentoSku:   data.magentoSku || null,
+      updateSource: 'manual',
+    },
+    include: { supplier: true },
+  })
+
+  return serializeMaterial(material)
 }
 
 export async function updateMaterial(id: string, data: {

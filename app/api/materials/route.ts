@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getMaterials } from '@/lib/db/materials'
+import { getMaterials, createMaterial } from '@/lib/db/materials'
 import type { MaterialFilters } from '@/types'
 
 export async function GET(request: NextRequest) {
@@ -26,5 +26,17 @@ export async function GET(request: NextRequest) {
       { error: 'Failed to fetch materials', code: 'FETCH_ERROR' },
       { status: 500 }
     )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const material = await createMaterial(body)
+    return NextResponse.json({ material }, { status: 201 })
+  } catch (error) {
+    console.error('[POST /api/materials]', error)
+    const message = error instanceof Error ? error.message : 'Failed to create material'
+    return NextResponse.json({ error: message, code: 'CREATE_ERROR' }, { status: 500 })
   }
 }

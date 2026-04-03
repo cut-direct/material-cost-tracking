@@ -29,6 +29,8 @@ export interface Material {
   variantType?: string | null
   // Derived
   costPerM2?: number
+  lastCostUpdatedAt?: string | null
+  hasPendingChange?: boolean
 }
 
 export interface CostHistory {
