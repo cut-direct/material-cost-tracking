@@ -21,7 +21,7 @@ CutMy purchases sheet materials including:
 EXTRACTION RULES:
 1. Extract the supplier/manufacturer name(s) mentioned in the email
 2. For each product range or material type with a price change:
-   - Extract a SHORT, CLEAN product identifier as the name — brand/material/grade, and include the thickness if one is explicitly stated (e.g. "6mm Birch Plywood", "Medite Premier MDF", "Clear Acrylic"). If NO specific thickness is mentioned, do NOT add one. NEVER include qualifiers like "all products", "all ranges", "excl. X", "with the exception of", "range", "items" etc. in the name field.
+   - Extract the product name EXACTLY as written in the email — do not paraphrase, substitute, or invent product names. Copy the brand, material name, grade, and thickness verbatim from the email text. If the email says "Roble Hera (Sega)", the name must be "Roble Hera (Sega)" — never replace it with another product name you may know. NEVER include qualifiers like "all products", "all ranges", "excl. X", "with the exception of", "range", "items" etc. in the name field.
    - If certain products are excluded (e.g. "excl. Trade and Tricoya"), list them in the exclusions field — do NOT put them in the name.
    - If the email says "all products" with no brand/material qualifier, use the manufacturer name as the range name (e.g. "Medite").
    - Determine if the change is a percentage (%) or absolute amount (£/currency)
@@ -58,7 +58,7 @@ const extractionTool: Anthropic.Tool = {
           properties: {
             name: {
               type: 'string',
-              description: 'SHORT clean product identifier — brand/material/grade only (e.g. "Medite Premier MDF", "Clear Acrylic"). Strip qualifiers like "all products", "excl. X", "range", "items" etc.',
+              description: 'Product name copied VERBATIM from the email — do not substitute or invent names. Include brand, grade, and thickness exactly as written (e.g. "18mm FINSA 12Twenty Roble Hera (Sega) Melamine"). Strip only prose qualifiers like "all products", "excl. X", "range", "items".',
             },
             thicknesses: {
               type: 'array',
@@ -325,12 +325,8 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
 
-    console.log(`[fuzzy] range="${range.name}" top5:`, scored.slice(0, 5).map(s => `${s.material.description} → ${s.score.toFixed(2)}`))
-
-    if (scored.length > 0 && scored[0].score > 0.7) {
-      // Include every material whose score is ≥ 0.7 (raised from 0.6 to reduce
-      // false positives when a specific product name is given)
-      const matches = scored.filter((s) => s.score >= 0.7)
+    if (scored.length > 0 && scored[0].score > 0.65) {
+      const matches = scored.filter((s) => s.score >= 0.65)
       for (const match of matches) {
         const confidence: ConfidenceLevel = match.score > 0.8 ? 'high' : 'medium'
         const proposedCost = calculateProposedCost(match.material.costPerSheet, range.changeType, range.changeValue)
