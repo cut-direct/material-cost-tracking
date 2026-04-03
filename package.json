@@ -13,7 +13,7 @@
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
+    "@anthropic-ai/sdk": "^0.82.0",
     "@prisma/client": "^5.14.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",

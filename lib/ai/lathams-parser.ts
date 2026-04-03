@@ -155,7 +155,7 @@ export async function parseLathamsQuote(pdfBase64: string): Promise<ParseResult>
               media_type: 'application/pdf',
               data: pdfBase64,
             },
-          } as Anthropic.DocumentBlockParam,
+          } as Anthropic.Messages.DocumentBlockParam,
           {
             type: 'text',
             text: 'Please extract all line items from this James Latham quotation PDF.',
