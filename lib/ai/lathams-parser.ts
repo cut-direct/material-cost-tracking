@@ -140,7 +140,7 @@ export async function parseLathamsQuote(pdfBase64: string): Promise<ParseResult>
   // 1. Extract line items from PDF via Claude
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
+    max_tokens: 16000,
     system: SYSTEM_PROMPT,
     tools: [extractionTool],
     tool_choice: { type: 'any' },
