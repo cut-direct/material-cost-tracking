@@ -325,6 +325,8 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
 
+    console.log(`[fuzzy] range="${range.name}" top5:`, scored.slice(0, 5).map(s => `${s.material.description} → ${s.score.toFixed(2)}`))
+
     if (scored.length > 0 && scored[0].score > 0.7) {
       // Include every material whose score is ≥ 0.7 (raised from 0.6 to reduce
       // false positives when a specific product name is given)
