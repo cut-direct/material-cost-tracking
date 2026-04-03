@@ -545,7 +545,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                     : <span className="text-[12px] text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3 text-[13px] text-gray-600">{material.thicknessMm}mm</td>
-                <td className="px-4 py-3 text-[13px] text-gray-600">{material.widthMm} × {material.heightMm}mm</td>
+                <td className="px-4 py-3 text-[13px] text-gray-600">{material.heightMm} × {material.widthMm}mm</td>
                 <td className="px-4 py-3 text-[13px] text-gray-600">{material.supplier?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <span className="cost-cell tabular-nums text-gray-900">{formatCurrency(material.costPerSheet)}</span>

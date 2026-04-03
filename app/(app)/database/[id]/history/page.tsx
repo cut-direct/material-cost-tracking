@@ -52,7 +52,7 @@ export default async function MaterialHistoryPage({ params }: Props) {
           <div className="mb-6 pb-6 border-b border-[#E5E5E3]">
             <h2 className="text-base font-semibold text-gray-900">{material.description}</h2>
             <p className="text-[13px] text-gray-500 mt-1">
-              {material.thicknessMm}mm · {material.widthMm} × {material.heightMm}mm ·{' '}
+              {material.thicknessMm}mm · {material.heightMm} × {material.widthMm}mm ·{' '}
               {material.supplier?.name}
             </p>
             <p className="text-[13px] font-medium tabular-nums text-gray-900 mt-2">
