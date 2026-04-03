@@ -291,9 +291,12 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
         const searchTarget = [m.description, m.variantType, m.typeFinish].filter(Boolean).join(' ')
         const combinedScore = fuzzyScore(range.name, searchTarget)
 
-        // Bonus: if every meaningful word in variantType appears in the range name,
-        // it's a strong group-level match (e.g. range "Coloured Acrylic" contains
-        // all words of variantType "Coloured"). Boost to ensure it clears the threshold.
+        // Bonus: if every meaningful word in variantType appears in the range name
+        // AND the range name is not much more specific than the variantType itself,
+        // it's a group-level match (e.g. "Coloured Acrylic +5%" → all colours).
+        // Do NOT boost when the range name is a specific product (e.g. it has many
+        // extra tokens beyond the variantType words) — that would incorrectly pull in
+        // all siblings of a specifically-named product.
         let variantBoost = 0
         if (m.variantType) {
           const vtWords = m.variantType.toLowerCase()
@@ -302,7 +305,18 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
             .filter((w) => w.length > 2 && !RANGE_STOP_WORDS.has(w))
           const rangeLower = range.name.toLowerCase()
           if (vtWords.length > 0 && vtWords.every((w) => rangeLower.includes(w))) {
-            variantBoost = 0.25
+            // Only boost if the range name isn't significantly more specific than variantType
+            // i.e. the number of extra meaningful tokens beyond vtWords is small (≤ 2)
+            const rangeWordsList = rangeLower
+              .split(/\s+/)
+              .map((w) => w.replace(/[^a-z0-9]/g, ''))
+              .filter((w) => w.length > 2 && !RANGE_STOP_WORDS.has(w))
+            const extraWords = rangeWordsList.filter(
+              (w) => !vtWords.some((vt) => vt.includes(w) || w.includes(vt))
+            )
+            if (extraWords.length <= 2) {
+              variantBoost = 0.25
+            }
           }
         }
 
@@ -311,9 +325,10 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
 
-    if (scored.length > 0 && scored[0].score > 0.6) {
-      // Include every material whose score is ≥ 0.6 (not just the top one)
-      const matches = scored.filter((s) => s.score >= 0.6)
+    if (scored.length > 0 && scored[0].score > 0.7) {
+      // Include every material whose score is ≥ 0.7 (raised from 0.6 to reduce
+      // false positives when a specific product name is given)
+      const matches = scored.filter((s) => s.score >= 0.7)
       for (const match of matches) {
         const confidence: ConfidenceLevel = match.score > 0.8 ? 'high' : 'medium'
         const proposedCost = calculateProposedCost(match.material.costPerSheet, range.changeType, range.changeValue)
