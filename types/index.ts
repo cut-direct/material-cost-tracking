@@ -107,6 +107,9 @@ export interface ParsedRange {
   changeValue: number
   effectiveDate: string | null
   rawText: string
+  /** For PDF imports (e.g. Lathams): the absolute new price per sheet, used instead of
+   *  calculating a delta from the current cost when an unresolved item is manually mapped. */
+  absoluteNewPrice?: number
 }
 
 export interface ResolvedChange {

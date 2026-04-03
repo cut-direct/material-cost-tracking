@@ -1,20 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, AlertCircle, CheckCircle } from 'lucide-react'
+import { RefreshCw, AlertCircle, CheckCircle, Upload, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { ReviewTable } from './ReviewTable'
 import { ContextPanel } from './ContextPanel'
 import type { ParseResult, BulkUpdateResponse } from '@/types'
 
-type LeftTab = 'email' | 'context'
+type LeftTab = 'email' | 'lathams' | 'context'
 
 export function PriceUpdateTool() {
   const [activeTab, setActiveTab] = useState<LeftTab>('email')
   const [emailBody, setEmailBody] = useState('')
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [commitResult, setCommitResult] = useState<BulkUpdateResponse | null>(null)
+  const [lathamsFile, setLathamsFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
   const parseMutation = useMutation<ParseResult, Error, string>({
@@ -36,6 +39,23 @@ export function PriceUpdateTool() {
     },
   })
 
+  const lathamsMutation = useMutation<ParseResult, Error, File>({
+    mutationFn: async (file) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/parse-pdf-lathams', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Parse failed')
+      }
+      return res.json()
+    },
+    onSuccess: (result) => {
+      setParseResult(result)
+      setCommitResult(null)
+    },
+  })
+
   function handleParse() {
     if (!emailBody.trim()) return
     setParseResult(null)
@@ -43,14 +63,29 @@ export function PriceUpdateTool() {
     parseMutation.mutate(emailBody)
   }
 
+  function handleLathamsParse() {
+    if (!lathamsFile) return
+    setParseResult(null)
+    setCommitResult(null)
+    lathamsMutation.mutate(lathamsFile)
+  }
+
   function handleCommitSuccess(result: BulkUpdateResponse) {
     setCommitResult(result)
-    // Invalidate materials and staged changes queries
     queryClient.invalidateQueries({ queryKey: ['materials'] })
     queryClient.invalidateQueries({ queryKey: ['staged-changes'] })
   }
 
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file?.type === 'application/pdf') setLathamsFile(file)
+  }
+
   const hasContent = emailBody.trim().length > 0
+  const isPending = parseMutation.isPending || lathamsMutation.isPending
+  const parseError = parseMutation.error ?? lathamsMutation.error
 
   return (
     <div className="flex gap-6 h-full overflow-hidden">
@@ -59,18 +94,22 @@ export function PriceUpdateTool() {
         <div className="bg-white rounded-xl border border-[#E5E5E3] overflow-hidden">
           {/* Tab bar */}
           <div className="flex border-b border-[#E5E5E3]">
-            {(['email', 'context'] as LeftTab[]).map((tab) => (
+            {([
+              { id: 'email', label: 'Email' },
+              { id: 'lathams', label: 'Lathams PDF' },
+              { id: 'context', label: 'Context' },
+            ] as { id: LeftTab; label: string }[]).map((tab) => (
               <button
-                key={tab}
+                key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2.5 text-[12px] font-semibold capitalize tracking-wide transition-colors ${
-                  activeTab === tab
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2.5 text-[12px] font-semibold tracking-wide transition-colors ${
+                  activeTab === tab.id
                     ? 'text-[#2DBDAA] border-b-2 border-[#2DBDAA] -mb-px'
                     : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
-                {tab === 'email' ? 'Email' : 'Context'}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -89,22 +128,15 @@ export function PriceUpdateTool() {
                     className="w-full h-64 px-3 py-2 text-[13px] text-gray-900 placeholder:text-gray-400 border border-[#E5E5E3] rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#2DBDAA] focus:border-[#2DBDAA] leading-relaxed"
                   />
                 </div>
-
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] text-gray-400">
-                    {emailBody.trim().length > 0
-                      ? `${emailBody.trim().split(/\s+/).length} words`
-                      : 'No content'}
+                    {hasContent ? `${emailBody.trim().split(/\s+/).length} words` : 'No content'}
                   </span>
                   <div className="flex items-center gap-2">
                     {hasContent && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setEmailBody('')
-                          setParseResult(null)
-                          setCommitResult(null)
-                        }}
+                        onClick={() => { setEmailBody(''); setParseResult(null); setCommitResult(null) }}
                         className="text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
                       >
                         Clear
@@ -123,6 +155,80 @@ export function PriceUpdateTool() {
                   </div>
                 </div>
               </div>
+            ) : activeTab === 'lathams' ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                    Upload Lathams Quotation PDF
+                  </label>
+                  {/* Drop zone */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleFileDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`flex flex-col items-center justify-center gap-2 h-36 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                      isDragging
+                        ? 'border-[#2DBDAA] bg-[#E6F4F1]'
+                        : lathamsFile
+                        ? 'border-[#2DBDAA]/40 bg-[#F0FAF8]'
+                        : 'border-[#E5E5E3] bg-[#F7F7F5] hover:border-[#2DBDAA]/40 hover:bg-[#F0FAF8]'
+                    }`}
+                  >
+                    {lathamsFile ? (
+                      <>
+                        <FileText size={24} className="text-[#2DBDAA]" />
+                        <p className="text-[13px] font-medium text-gray-700">{lathamsFile.name}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {(lathamsFile.size / 1024).toFixed(0)} KB — click to replace
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={24} className="text-gray-400" />
+                        <p className="text-[13px] text-gray-500">Drop PDF here or click to browse</p>
+                        <p className="text-[11px] text-gray-400">James Latham quotations only</p>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) setLathamsFile(file)
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-gray-400">
+                    {lathamsFile ? 'Ready to parse' : 'No file selected'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {lathamsFile && (
+                      <button
+                        type="button"
+                        onClick={() => { setLathamsFile(null); setParseResult(null); setCommitResult(null) }}
+                        className="text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="md"
+                      disabled={!lathamsFile || lathamsMutation.isPending}
+                      loading={lathamsMutation.isPending}
+                      onClick={handleLathamsParse}
+                    >
+                      <RefreshCw size={14} />
+                      Parse PDF
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <ContextPanel />
             )}
@@ -130,7 +236,7 @@ export function PriceUpdateTool() {
         </div>
 
         {/* Parse status */}
-        {parseMutation.isPending && (
+        {isPending && (
           <div className="bg-white rounded-xl border border-[#E5E5E3] p-4">
             <div className="flex items-center gap-3">
               <svg className="animate-spin h-4 w-4 text-[#2DBDAA]" viewBox="0 0 24 24" fill="none">
@@ -138,20 +244,22 @@ export function PriceUpdateTool() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               <div>
-                <p className="text-[13px] font-medium text-gray-700">Parsing email with Claude…</p>
-                <p className="text-[12px] text-gray-400">This usually takes 5–15 seconds</p>
+                <p className="text-[13px] font-medium text-gray-700">
+                  {lathamsMutation.isPending ? 'Parsing Lathams PDF with Claude…' : 'Parsing email with Claude…'}
+                </p>
+                <p className="text-[12px] text-gray-400">This usually takes 10–30 seconds</p>
               </div>
             </div>
           </div>
         )}
 
-        {parseMutation.isError && (
+        {(parseMutation.isError || lathamsMutation.isError) && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="flex items-start gap-2">
               <AlertCircle size={15} className="text-red-500 mt-0.5 shrink-0" />
               <div>
                 <p className="text-[13px] font-medium text-red-700">Parse failed</p>
-                <p className="text-[12px] text-red-600 mt-0.5">{parseMutation.error?.message}</p>
+                <p className="text-[12px] text-red-600 mt-0.5">{parseError?.message}</p>
               </div>
             </div>
           </div>
@@ -217,7 +325,7 @@ export function PriceUpdateTool() {
 
       {/* Right panel — 62% */}
       <div className="flex-1 min-w-0 flex flex-col h-full">
-        {!parseResult && !parseMutation.isPending && (
+        {!parseResult && !isPending && (
           <div className="flex items-center justify-center h-full min-h-64">
             <div className="text-center">
               <div
@@ -226,22 +334,24 @@ export function PriceUpdateTool() {
               >
                 <RefreshCw size={20} className="text-gray-400" />
               </div>
-              <p className="text-[13px] font-medium text-gray-500">No email parsed yet</p>
+              <p className="text-[13px] font-medium text-gray-500">Nothing parsed yet</p>
               <p className="text-[12px] text-gray-400 mt-1">
-                Paste an email on the left and click &ldquo;Parse Email&rdquo;
+                Paste an email or upload a Lathams PDF on the left
               </p>
             </div>
           </div>
         )}
 
-        {parseMutation.isPending && (
+        {isPending && (
           <div className="flex items-center justify-center h-full min-h-64">
             <div className="text-center">
               <svg className="animate-spin h-8 w-8 text-[#2DBDAA] mx-auto mb-3" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <p className="text-[13px] text-gray-500">Claude is reading the email…</p>
+              <p className="text-[13px] text-gray-500">
+                {lathamsMutation.isPending ? 'Claude is reading the PDF…' : 'Claude is reading the email…'}
+              </p>
             </div>
           </div>
         )}

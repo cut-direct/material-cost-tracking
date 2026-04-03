@@ -157,13 +157,15 @@ export function ReviewTable({ parseResult, onCommitSuccess }: ReviewTableProps) 
       const material = allMaterials?.find((m) => m.id === u.mappedMaterialId)
       if (!material) continue
 
-      let proposedCost = material.costPerSheet
-      if (u.parsedRange.changeType === 'percentage') {
-        proposedCost = material.costPerSheet * (1 + u.parsedRange.changeValue / 100)
+      let proposedCost: number
+      if (u.parsedRange.absoluteNewPrice != null) {
+        // PDF import: we already have the exact new price
+        proposedCost = Math.round(u.parsedRange.absoluteNewPrice * 100) / 100
+      } else if (u.parsedRange.changeType === 'percentage') {
+        proposedCost = Math.round(material.costPerSheet * (1 + u.parsedRange.changeValue / 100) * 100) / 100
       } else {
-        proposedCost = material.costPerSheet + u.parsedRange.changeValue
+        proposedCost = Math.round((material.costPerSheet + u.parsedRange.changeValue) * 100) / 100
       }
-      proposedCost = Math.round(proposedCost * 100) / 100
 
       changes.push({
         materialId: u.mappedMaterialId,
