@@ -165,14 +165,22 @@ export async function parseLathamsQuote(pdfBase64: string): Promise<ParseResult>
     ],
   })
 
+  console.log('[lathams-parser] response stop_reason:', response.stop_reason)
+  console.log('[lathams-parser] response content blocks:', response.content.map(b => b.type))
+
   const toolBlock = response.content.find((b) => b.type === 'tool_use')
   if (!toolBlock || toolBlock.type !== 'tool_use') {
+    const textBlock = response.content.find((b) => b.type === 'text')
+    if (textBlock && textBlock.type === 'text') {
+      console.log('[lathams-parser] no tool call — text response:', textBlock.text.slice(0, 500))
+    }
     return { resolved: [], unresolved: [], manufacturers: ['James Latham'], parseTimestamp: new Date().toISOString() }
   }
 
   const extracted = toolBlock.input as ExtractionResult
   console.log('[lathams-parser] extracted keys:', Object.keys(extracted ?? {}))
   console.log('[lathams-parser] items count:', extracted?.items?.length ?? 'undefined')
+  console.log('[lathams-parser] first 2 items:', JSON.stringify(extracted?.items?.slice(0, 2), null, 2))
   const validItems = (extracted?.items ?? []).filter((i) => !i.isPOA && i.pricePerBoard > 0)
 
   if (validItems.length === 0) {
