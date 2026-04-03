@@ -229,6 +229,7 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
   }
 
   const extracted = toolUseBlock.input as ExtractionResult
+  console.log('[parser] extracted ranges:', JSON.stringify(extracted.ranges?.map(r => ({ name: r.name, rawText: r.rawText })), null, 2))
 
   // 4. Load all materials and known aliases
   const [allMaterials, aliasMap] = await Promise.all([
@@ -270,8 +271,6 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
     const exclusionWords = (range.exclusions ?? []).map((e) => e.toLowerCase())
 
     const candidateMaterials = allMaterials.filter((m) => {
-      // Skip materials with no cost set — percentage changes would resolve to £0.00
-      if (m.costPerSheet <= 0) return false
       // Skip materials whose description matches an exclusion from the email
       if (exclusionWords.some((ex) => m.description.toLowerCase().includes(ex))) return false
       // Enforce exact thickness when array of thicknesses is specified in the range
@@ -295,22 +294,26 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
         const rawScore = fuzzyScore(range.rawText, searchTarget)
         const combinedScore = Math.max(nameScore, rawScore)
 
-        // Bonus: if every meaningful word in variantType appears in the range name
-        // AND the range name is not much more specific than the variantType itself,
-        // it's a group-level match (e.g. "Coloured Acrylic +5%" → all colours).
-        // Do NOT boost when the range name is a specific product (e.g. it has many
-        // extra tokens beyond the variantType words) — that would incorrectly pull in
-        // all siblings of a specifically-named product.
+        // debug log added after finalScore is computed — see below
+
+        // When the range name belongs to a specific product within a variant group,
+        // re-score using ONLY the product-specific tokens (those beyond the variantType
+        // words). This prevents siblings in the same group from over-matching on generic
+        // shared tokens like brand name, thickness, and material type.
+        // e.g. "18mm FINSA 12Twenty Roble Hera MDF" → specific tokens are ["18mm","roble","hera","mdf"]
+        //   → "Hickory" sibling matches 2/4 = 0.50, below threshold
+        //   → "Roble Hera" sibling matches 4/4 = 1.00 ✓
+        let finalScore = combinedScore
         let variantBoost = 0
+
         if (m.variantType) {
           const vtWords = m.variantType.toLowerCase()
             .split(/\s+/)
             .map((w) => w.replace(/[^a-z0-9]/g, ''))
             .filter((w) => w.length > 2 && !RANGE_STOP_WORDS.has(w))
           const rangeLower = range.name.toLowerCase()
+
           if (vtWords.length > 0 && vtWords.every((w) => rangeLower.includes(w))) {
-            // Only boost if the range name isn't significantly more specific than variantType
-            // i.e. the number of extra meaningful tokens beyond vtWords is small (≤ 2)
             const rangeWordsList = rangeLower
               .split(/\s+/)
               .map((w) => w.replace(/[^a-z0-9]/g, ''))
@@ -318,28 +321,48 @@ export async function parseEmail(emailBody: string): Promise<ParseResult> {
             const extraWords = rangeWordsList.filter(
               (w) => !vtWords.some((vt) => vt.includes(w) || w.includes(vt))
             )
+
             if (extraWords.length <= 2) {
+              // Group-level range (e.g. "Coloured Acrylic +5%") → boost all variants
               variantBoost = 0.25
+            } else {
+              // Specific product within group: re-score on product-specific tokens only.
+              // This stops generic shared tokens (brand, thickness, material type) from
+              // inflating sibling scores above the threshold.
+              const descWords = searchTarget.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
+              const specificMatches = extraWords.filter(
+                (w) => descWords.some((d) => d.includes(w) || w.includes(d))
+              )
+              finalScore = specificMatches.length / extraWords.length
             }
           }
         }
 
-        return { material: m, score: Math.min(1, combinedScore + variantBoost) }
+        const score = Math.min(1, finalScore + variantBoost)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`  [score] "${m.description}" base=${combinedScore.toFixed(2)} final=${finalScore.toFixed(2)} → ${score.toFixed(2)}`)
+        }
+        return { material: m, score }
       })
       .filter((s) => s.score > 0.3)
       .sort((a, b) => b.score - a.score)
 
+    console.log(`[parser] top 5 for "${range.name}":`, scored.slice(0, 5).map(s => `${s.material.description} → ${s.score.toFixed(3)}`))
+
     if (scored.length > 0 && scored[0].score > 0.65) {
       const matches = scored.filter((s) => s.score >= 0.65)
       for (const match of matches) {
-        const confidence: ConfidenceLevel = match.score > 0.8 ? 'high' : 'medium'
-        const proposedCost = calculateProposedCost(match.material.costPerSheet, range.changeType, range.changeValue)
+        // If the material has no cost set, downgrade to medium so it lands in
+        // "Needs Review" — a percentage change on £0 would produce £0.
+        const hasNoCost = match.material.costPerSheet <= 0
+        const confidence: ConfidenceLevel = hasNoCost ? 'medium' : (match.score > 0.8 ? 'high' : 'medium')
+        const proposedCost = hasNoCost ? 0 : calculateProposedCost(match.material.costPerSheet, range.changeType, range.changeValue)
         resolved.push({
           materialId: match.material.id,
           materialDescription: match.material.description,
           currentCost: match.material.costPerSheet,
           proposedCost,
-          changePercent: calculateChangePercent(match.material.costPerSheet, proposedCost),
+          changePercent: hasNoCost ? 0 : calculateChangePercent(match.material.costPerSheet, proposedCost),
           effectiveDate: range.effectiveDate,
           confidence,
           rawText: range.rawText,
