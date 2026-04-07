@@ -104,6 +104,8 @@ function parseMetabaseRow(row: Record<string, string>, supplierId: string) {
   const widthMm = parseFloat(row['Cost_Width']?.trim() ?? '0') || 0
   const heightMm = parseFloat(row['Cost_Length']?.trim() ?? '0') || 0
   const costPerSheet = parseFloat(row['Cost']?.trim() ?? '0') || 0
+  const markupMultiplierRaw = row['markup_multiplier']?.trim() ?? ''
+  const markupMultiplier = markupMultiplierRaw !== '' ? parseFloat(markupMultiplierRaw) : null
 
   return {
     description,
@@ -114,6 +116,7 @@ function parseMetabaseRow(row: Record<string, string>, supplierId: string) {
     heightMm,
     supplierId,
     costPerSheet,
+    markupMultiplier,
     updateSource: 'import',
     lastUpdatedAt: new Date(),
     magentoName,
@@ -134,6 +137,8 @@ function parseTemplateRow(row: Record<string, string>, supplierId: string) {
   const heightMm = parseFloat(row['height_mm']?.trim() ?? '0') || 0
   const costPerSheet = parseFloat(row['cost_per_sheet']?.trim() ?? '0') || 0
   const variantType = row['variant_type']?.trim() || null
+  const markupMultiplierRaw = row['markup_multiplier']?.trim() ?? ''
+  const markupMultiplier = markupMultiplierRaw !== '' ? parseFloat(markupMultiplierRaw) : null
 
   return {
     description,
@@ -144,6 +149,7 @@ function parseTemplateRow(row: Record<string, string>, supplierId: string) {
     heightMm,
     supplierId,
     costPerSheet,
+    markupMultiplier,
     updateSource: 'import',
     lastUpdatedAt: new Date(),
     magentoName,

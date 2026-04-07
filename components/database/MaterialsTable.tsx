@@ -37,6 +37,7 @@ interface EditValues {
   heightMm: string
   supplierName: string
   costPerSheet: string
+  markupMultiplier: string
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
       heightMm:     String(material.heightMm),
       supplierName: material.supplier?.name ?? '',
       costPerSheet: String(material.costPerSheet),
+      markupMultiplier: material.markupMultiplier != null ? String(material.markupMultiplier) : '',
     })
   }
 
@@ -327,6 +329,7 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
           heightMm:     parseFloat(values.heightMm),
           supplierName: values.supplierName,
           costPerSheet: parseFloat(values.costPerSheet),
+          markupMultiplier: values.markupMultiplier.trim() !== '' ? parseFloat(values.markupMultiplier) : null,
         }),
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Update failed') }
@@ -450,7 +453,7 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
               <SortTh col="costPerSheet"  label="Cost/Sheet"    activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-right w-[110px]" />
               <th className="text-right px-4 py-3 text-gray-500 w-[110px]">Cost/m²</th>
               <SortTh col="lastUpdatedAt" label="Cost Updated"  activeCol={sortCol} dir={sortDir} onSort={handleSort} className="text-left w-[120px]" />
-              <th className="text-left px-4 py-3 text-gray-500 w-[80px]">Source</th>
+              <th className="text-right px-4 py-3 text-gray-500 w-[80px]">Markup</th>
               <th className="text-left px-4 py-3 text-gray-500 w-[70px]">Pending</th>
               <th className="w-8" />
             </tr>
@@ -568,7 +571,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                 <td className="px-4 py-2">{editInput('costPerSheet', { type: 'number' })}</td>
                 <td className="px-4 py-2 text-right text-[13px] text-gray-400">—</td>
                 <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
-                <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
+                <td className="px-4 py-2 text-right">{editInput('markupMultiplier', { type: 'number' })}</td>
                 <td className="px-4 py-2 text-[13px] text-gray-400">—</td>
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-2">
@@ -629,8 +632,10 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                     <span className="text-[13px] text-gray-300">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <span className="text-[12px] text-gray-400">{sourceLabel(material.updateSource)}</span>
+                <td className="px-4 py-3 text-right">
+                  {material.markupMultiplier != null
+                    ? <span className="tabular-nums text-[13px] text-gray-600">{material.markupMultiplier}×</span>
+                    : <span className="text-[13px] text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   {material.hasPendingChange

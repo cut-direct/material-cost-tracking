@@ -21,6 +21,7 @@ function serializeMaterial(m: {
   lastUpdatedAt: Date
   createdAt: Date
   updatedAt: Date
+  markupMultiplier: { toNumber(): number } | null
   magentoSku: string | null
   magentoName: string | null
   magentoEntityId: number | null
@@ -47,6 +48,7 @@ function serializeMaterial(m: {
     lastUpdatedAt: m.lastUpdatedAt.toISOString(),
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
+    markupMultiplier: m.markupMultiplier?.toNumber() ?? null,
     magentoSku: m.magentoSku,
     magentoName: m.magentoName,
     magentoEntityId: m.magentoEntityId,
@@ -261,6 +263,7 @@ export async function createMaterial(data: {
   heightMm: number
   supplierName: string
   costPerSheet: number
+  markupMultiplier?: number | null
   variantType?: string | null
   magentoSku?: string | null
 }): Promise<Material> {
@@ -280,6 +283,7 @@ export async function createMaterial(data: {
       heightMm:     data.heightMm,
       supplierId:   supplier.id,
       costPerSheet: data.costPerSheet,
+      markupMultiplier: data.markupMultiplier ?? null,
       variantType:  data.variantType || null,
       magentoSku:   data.magentoSku || null,
       updateSource: 'manual',
@@ -292,6 +296,7 @@ export async function createMaterial(data: {
 
 export async function updateMaterial(id: string, data: {
   description?: string
+  markupMultiplier?: number | null
   variantType?: string | null
   magentoSku?: string | null
   thicknessMm?: number
@@ -315,6 +320,7 @@ export async function updateMaterial(id: string, data: {
 
   const updateData = {
     ...(data.description !== undefined && { description: data.description }),
+    ...(data.markupMultiplier !== undefined && { markupMultiplier: data.markupMultiplier }),
     ...(data.variantType !== undefined && { variantType: data.variantType }),
     ...(data.magentoSku !== undefined && { magentoSku: data.magentoSku }),
     ...(data.thicknessMm !== undefined && { thicknessMm: data.thicknessMm }),

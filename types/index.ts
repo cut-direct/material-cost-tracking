@@ -23,6 +23,7 @@ export interface Material {
   updatedAt: string
   // Joined
   supplier?: Supplier
+  markupMultiplier?: number | null
   magentoSku?: string | null
   magentoName?: string | null
   magentoEntityId?: number | null

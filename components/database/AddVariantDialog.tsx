@@ -24,6 +24,7 @@ interface FormValues {
   heightMm:     string
   supplierName: string
   costPerSheet: string
+  markupMultiplier: string
 }
 
 const EMPTY: FormValues = {
@@ -37,6 +38,7 @@ const EMPTY: FormValues = {
   heightMm:     '',
   supplierName: '',
   costPerSheet: '',
+  markupMultiplier: '',
 }
 
 const fieldClass =
@@ -76,6 +78,7 @@ export function AddVariantDialog({
           heightMm:     parseFloat(values.heightMm),
           supplierName: values.supplierName.trim(),
           costPerSheet: parseFloat(values.costPerSheet),
+          markupMultiplier: values.markupMultiplier.trim() !== '' ? parseFloat(values.markupMultiplier) : null,
         }),
       })
       if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Failed to create variant') }
@@ -166,19 +169,25 @@ export function AddVariantDialog({
               </div>
             </div>
 
-            {/* Sheet size + Cost */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Sheet Size (mm) *</label>
-                <div className="flex items-center gap-2">
-                  <input value={form.widthMm} onChange={(e) => set('widthMm', e.target.value)} placeholder="Width" type="number" className={fieldClass} />
-                  <span className="text-gray-400 text-[12px] shrink-0">×</span>
-                  <input value={form.heightMm} onChange={(e) => set('heightMm', e.target.value)} placeholder="Height" type="number" className={fieldClass} />
-                </div>
+            {/* Sheet size */}
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Sheet Size (mm) *</label>
+              <div className="flex items-center gap-2">
+                <input value={form.widthMm} onChange={(e) => set('widthMm', e.target.value)} placeholder="Width" type="number" className={fieldClass} />
+                <span className="text-gray-400 text-[12px] shrink-0">×</span>
+                <input value={form.heightMm} onChange={(e) => set('heightMm', e.target.value)} placeholder="Height" type="number" className={fieldClass} />
               </div>
+            </div>
+
+            {/* Cost + Markup */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Cost / Sheet (£) *</label>
                 <input value={form.costPerSheet} onChange={(e) => set('costPerSheet', e.target.value)} placeholder="e.g. 24.50" type="number" step="0.01" className={fieldClass} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Markup Multiplier</label>
+                <input value={form.markupMultiplier} onChange={(e) => set('markupMultiplier', e.target.value)} placeholder="e.g. 1.45" type="number" step="0.001" className={fieldClass} />
               </div>
             </div>
 

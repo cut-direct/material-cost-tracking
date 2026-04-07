@@ -38,6 +38,8 @@ model Material {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  markupMultiplier  Decimal?  @map("markup_multiplier") @db.Decimal(5, 3)
+
   // Magento integration fields
   magentoSku        String?  @unique @map("magento_sku")
   magentoName       String?  @map("magento_name")
