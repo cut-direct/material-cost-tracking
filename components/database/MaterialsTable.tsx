@@ -267,6 +267,18 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
     onError: (err: Error) => setDeleteError(err.message),
   })
 
+  const handlePrefetchHistory = useCallback((id: string) => {
+    void queryClient.prefetchQuery({
+      queryKey: ['cost-history', id],
+      queryFn: async () => {
+        const res = await fetch(`/api/materials/${id}/history`)
+        if (!res.ok) throw new Error('Failed to fetch cost history')
+        return res.json()
+      },
+      staleTime: 5 * 60 * 1000,
+    })
+  }, [queryClient])
+
   function handleDelete() {
     const ids = Array.from(selectedIds)
     if (!window.confirm(`Permanently delete ${ids.length} material${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return
@@ -463,6 +475,7 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
                 onSave={() => editingId && editValues && editMutation.mutate({ id: editingId, values: editValues })}
                 onCancelEdit={handleCancelEdit}
                 isSaving={editMutation.isPending}
+                onPrefetch={handlePrefetchHistory}
               />
             ))}
           </tbody>
@@ -487,12 +500,13 @@ export function MaterialsTable({ initialData, initialTotal, filters: externalFil
 
 // ─── Group rows ───────────────────────────────────────────────────────────────
 
-function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editingId, editValues, onEditChange, onSave, onCancelEdit, isSaving }: {
+function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editingId, editValues, onEditChange, onSave, onCancelEdit, isSaving, onPrefetch }: {
   group: MaterialGroup; expandedId: string | null
   selectedIds: Set<string>; onToggle: (id: string) => void; onSelect: (id: string) => void
   editingId: string | null; editValues: EditValues | null
   onEditChange: (field: keyof EditValues, value: string) => void
   onSave: () => void; onCancelEdit: () => void; isSaving: boolean
+  onPrefetch: (id: string) => void
 }) {
   return (
     <>
@@ -580,7 +594,7 @@ function GroupRows({ group, expandedId, selectedIds, onToggle, onSelect, editing
                 onClick={() => onToggle(material.id)}
                 className="cursor-pointer border-b border-[#F0F0EE] transition-colors duration-100"
                 style={{ backgroundColor: isSelected ? '#F0FAF8' : isExpanded ? '#F0F0EE' : undefined }}
-                onMouseEnter={(e) => { if (!isExpanded && !isSelected) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#F0F0EE' }}
+                onMouseEnter={(e) => { onPrefetch(material.id); if (!isExpanded && !isSelected) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#F0F0EE' }}
                 onMouseLeave={(e) => { if (!isExpanded && !isSelected) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '' }}
               >
                 <td className="px-4 py-3" onClick={(e) => { e.stopPropagation(); onSelect(material.id) }}>

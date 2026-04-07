@@ -132,6 +132,7 @@ export function CostHistoryPanel({ materialId, materialDescription }: CostHistor
       if (!res.ok) throw new Error('Failed to fetch cost history')
       return res.json()
     },
+    staleTime: 5 * 60 * 1000,
   })
 
   return (
