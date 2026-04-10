@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 
 interface BasketItem {
   id: string
@@ -11,11 +11,19 @@ interface BasketItem {
   heightMm: number
 }
 
+interface PriceEntry {
+  basketItemId: string
+  pricePerM2: number | null
+  previousPricePerM2: number | null
+  rawValue: string | null
+}
+
 interface CompetitorData {
   slug: string
   label: string
   runAt: string | null
-  prices: { basketItemId: string; pricePerM2: number | null; rawValue: string | null }[]
+  previousRunAt: string | null
+  prices: PriceEntry[]
 }
 
 interface ApiResponse {
@@ -34,15 +42,39 @@ function fmtDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function Delta({ current, previous }: { current: number | null; previous: number | null }) {
+  if (current == null || previous == null) return null
+  const diff = current - previous
+  if (Math.abs(diff) < 0.01) return null
+
+  const pct = (diff / previous) * 100
+  const up = diff > 0
+  // Price going UP = competitor getting more expensive = good for Cut My = green
+  // Price going DOWN = competitor getting cheaper = bad for Cut My = red
+  const colour = up ? 'text-green-600' : 'text-red-500'
+  const Icon = up ? TrendingUp : TrendingDown
+
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${colour} ml-1.5`}>
+      <Icon size={10} />
+      {up ? '+' : ''}£{Math.abs(diff).toFixed(2)}
+      <span className="opacity-70">({up ? '+' : ''}{pct.toFixed(1)}%)</span>
+    </span>
+  )
+}
+
 function PriceCell({
-  price,
+  entry,
   cutMyPrice,
   isCutMy,
 }: {
-  price: number | null
+  entry?: PriceEntry
   cutMyPrice: number | null
   isCutMy?: boolean
 }) {
+  const price = entry?.pricePerM2 ?? null
+  const previous = entry?.previousPricePerM2 ?? null
+
   const hasComparison = price != null && cutMyPrice != null && !isCutMy
   const cheaper = hasComparison && price < cutMyPrice
   const pricier = hasComparison && price > cutMyPrice
@@ -50,7 +82,7 @@ function PriceCell({
   return (
     <td
       className={[
-        'px-4 py-3 text-right text-sm font-mono tabular-nums',
+        'px-4 py-3 text-right text-sm tabular-nums',
         isCutMy ? 'bg-[#2DBDAA]/10 font-semibold text-[#1a8a7a]' : 'text-gray-700',
         cheaper ? 'text-red-600' : '',
         pricier ? 'text-green-700' : '',
@@ -58,7 +90,8 @@ function PriceCell({
         .filter(Boolean)
         .join(' ')}
     >
-      {fmt(price)}
+      <span className="font-mono">{fmt(price)}</span>
+      {!isCutMy && <Delta current={price} previous={previous} />}
     </td>
   )
 }
@@ -76,7 +109,7 @@ export default function CompetitorPricesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Competitor Prices</h1>
           <p className="text-sm text-gray-500 mt-1">
-            £/m² inc VAT · 1000 × 1000mm test dimension · 3mm Clear Acrylic
+            £/m² inc VAT · 1000 × 1000mm · 3mm Clear Acrylic · delta vs previous run
           </p>
         </div>
         <button
@@ -134,14 +167,14 @@ export default function CompetitorPricesPage() {
                       </div>
                     </td>
                     {/* Cut My */}
-                    <PriceCell price={cutMyPrice} cutMyPrice={cutMyPrice} isCutMy />
+                    <PriceCell cutMyPrice={cutMyPrice} isCutMy />
                     {/* Competitors */}
                     {data.competitors.map((c) => {
-                      const p = c.prices.find((x) => x.basketItemId === item.id)
+                      const entry = c.prices.find((x) => x.basketItemId === item.id)
                       return (
                         <PriceCell
                           key={c.slug}
-                          price={p?.pricePerM2 ?? null}
+                          entry={entry}
                           cutMyPrice={cutMyPrice}
                         />
                       )
@@ -162,10 +195,11 @@ export default function CompetitorPricesPage() {
 
       {data && data.basketItems.length > 0 && (
         <p className="mt-4 text-xs text-gray-400">
-          Competitor prices shown in{' '}
-          <span className="text-red-500 font-medium">red</span> are cheaper than Cut My,{' '}
-          <span className="text-green-600 font-medium">green</span> are more expensive.
-          Cut My price requires <code>material_ref</code> set on basket item and markup multiplier on the material.
+          Competitor price shown in{' '}
+          <span className="text-red-500 font-medium">red</span> = cheaper than Cut My.{' '}
+          <span className="text-green-600 font-medium">Green</span> = more expensive.
+          Delta indicator: <span className="text-green-600 font-medium">green ▲</span> = competitor raised price,{' '}
+          <span className="text-red-500 font-medium">red ▼</span> = competitor lowered price.
         </p>
       )}
     </div>

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 
-// Returns the latest price for each competitor × basket item,
-// plus Cut My's own retail price derived from materials table.
-
 const COMPETITORS = [
   'simply-plastics',
   'plastic-people',
@@ -29,15 +26,17 @@ export async function GET() {
       orderBy: { createdAt: 'asc' },
     })
 
-    // For each competitor, get the most recent run and its prices
+    // For each competitor, get the two most recent successful runs
     const competitorData = await Promise.all(
       COMPETITORS.map(async (slug) => {
-        const latestRun = await prisma.competitorRun.findFirst({
+        const runs = await prisma.competitorRun.findMany({
           where: { competitor: slug, status: { in: ['success', 'partial'] } },
           orderBy: { runAt: 'desc' },
+          take: 2,
           include: { prices: true },
         })
-        return { slug, label: COMPETITOR_LABELS[slug], latestRun }
+        const [current, previous] = runs
+        return { slug, label: COMPETITOR_LABELS[slug], current, previous }
       })
     )
 
@@ -49,11 +48,8 @@ export async function GET() {
           where: { magentoSku: item.materialRef },
         })
         if (material && material.markupMultiplier && material.costPerSheet) {
-          // Retail price per sheet ÷ area of sheet in m²
-          const sheetAreaM2 =
-            (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
-          const retailPerSheet =
-            Number(material.costPerSheet) * Number(material.markupMultiplier)
+          const sheetAreaM2 = (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
+          const retailPerSheet = Number(material.costPerSheet) * Number(material.markupMultiplier)
           cutMyPrices[item.id] = sheetAreaM2 > 0 ? retailPerSheet / sheetAreaM2 : null
         } else {
           cutMyPrices[item.id] = null
@@ -71,15 +67,25 @@ export async function GET() {
         widthMm: i.widthMm,
         heightMm: i.heightMm,
       })),
-      competitors: competitorData.map(({ slug, label, latestRun }) => ({
+      competitors: competitorData.map(({ slug, label, current, previous }) => ({
         slug,
         label,
-        runAt: latestRun?.runAt ?? null,
-        prices: (latestRun?.prices ?? []).map((p) => ({
-          basketItemId: p.basketItemId,
-          pricePerM2: p.pricePerM2 !== null ? Number(p.pricePerM2) : null,
-          rawValue: p.rawValue,
-        })),
+        runAt: current?.runAt ?? null,
+        previousRunAt: previous?.runAt ?? null,
+        prices: basketItems.map((item) => {
+          const currentPrice = current?.prices.find((p) => p.basketItemId === item.id)
+          const previousPrice = previous?.prices.find((p) => p.basketItemId === item.id)
+          return {
+            basketItemId: item.id,
+            pricePerM2: currentPrice?.pricePerM2 !== null && currentPrice?.pricePerM2 !== undefined
+              ? Number(currentPrice.pricePerM2)
+              : null,
+            previousPricePerM2: previousPrice?.pricePerM2 !== null && previousPrice?.pricePerM2 !== undefined
+              ? Number(previousPrice.pricePerM2)
+              : null,
+            rawValue: currentPrice?.rawValue ?? null,
+          }
+        }),
       })),
       cutMyPrices,
     })
