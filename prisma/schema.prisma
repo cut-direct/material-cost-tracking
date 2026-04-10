@@ -118,7 +118,7 @@ model CompetitorBasketItem {
   id          String   @id @default(cuid())
   name        String   // e.g. "3mm Clear Acrylic"
   category    String   // e.g. "Plastic"
-  materialRef String?  @map("material_ref") // magento_sku of equivalent Cut My variant
+  magentoEntityId Int?  @map("magento_entity_id") // entity_id of the equivalent Cut My variant
   widthMm     Int      @map("width_mm")
   heightMm    Int      @map("height_mm")
   thicknessMm Decimal  @map("thickness_mm") @db.Decimal(6, 2)

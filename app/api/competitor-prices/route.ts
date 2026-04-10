@@ -40,12 +40,13 @@ export async function GET() {
       })
     )
 
-    // For each basket item, get Cut My's retail price
+    // For each basket item, get Cut My's retail price via magentoEntityId
     const cutMyPrices: Record<string, number | null> = {}
+    const cutMyNames: Record<string, string | null> = {}
     for (const item of basketItems) {
-      if (item.materialRef) {
+      if (item.magentoEntityId) {
         const material = await prisma.material.findFirst({
-          where: { magentoSku: item.materialRef },
+          where: { magentoEntityId: item.magentoEntityId },
         })
         if (material && material.markupMultiplier && material.costPerSheet) {
           const sheetAreaM2 = (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
@@ -54,8 +55,10 @@ export async function GET() {
         } else {
           cutMyPrices[item.id] = null
         }
+        cutMyNames[item.id] = material?.magentoName ?? null
       } else {
         cutMyPrices[item.id] = null
+        cutMyNames[item.id] = null
       }
     }
 
@@ -66,6 +69,8 @@ export async function GET() {
         thicknessMm: Number(i.thicknessMm),
         widthMm: i.widthMm,
         heightMm: i.heightMm,
+        magentoEntityId: i.magentoEntityId ?? null,
+        cutMyVariantName: cutMyNames[i.id] ?? null,
       })),
       competitors: competitorData.map(({ slug, label, current, previous }) => ({
         slug,
@@ -88,6 +93,7 @@ export async function GET() {
         }),
       })),
       cutMyPrices,
+      cutMyNames,
     })
   } catch (err) {
     console.error('competitor-prices API error:', err)
