@@ -111,3 +111,53 @@ model ParserContext {
 
   @@map("parser_context")
 }
+
+// ─── Competitor Price Monitor ────────────────────────────────────────────────
+
+model CompetitorBasketItem {
+  id          String   @id @default(cuid())
+  name        String   // e.g. "3mm Clear Acrylic"
+  category    String   // e.g. "Plastic"
+  materialRef String?  @map("material_ref") // magento_sku of equivalent Cut My variant
+  widthMm     Int      @map("width_mm")
+  heightMm    Int      @map("height_mm")
+  thicknessMm Decimal  @map("thickness_mm") @db.Decimal(6, 2)
+  colour      String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  prices CompetitorPrice[]
+
+  @@map("competitor_basket_items")
+}
+
+model CompetitorRun {
+  id         String   @id @default(cuid())
+  competitor String   // e.g. "simply-plastics"
+  runAt      DateTime @default(now()) @map("run_at")
+  status     String   @default("success") // "success" | "partial" | "failed"
+  notes      String?
+
+  prices CompetitorPrice[]
+
+  @@index([competitor])
+  @@index([runAt])
+  @@map("competitor_runs")
+}
+
+model CompetitorPrice {
+  id           String   @id @default(cuid())
+  runId        String   @map("run_id")
+  basketItemId String   @map("basket_item_id")
+  priceGbp     Decimal? @map("price_gbp") @db.Decimal(10, 2)
+  pricePerM2   Decimal? @map("price_per_m2") @db.Decimal(10, 2)
+  url          String?
+  rawValue     String?  @map("raw_value")
+
+  run        CompetitorRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  basketItem CompetitorBasketItem @relation(fields: [basketItemId], references: [id])
+
+  @@index([runId])
+  @@index([basketItemId])
+  @@map("competitor_prices")
+}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Database, RefreshCw, Clock } from 'lucide-react'
+import { Database, RefreshCw, Clock, BarChart2 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 interface SidebarProps {
@@ -10,9 +10,10 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { href: '/database',       label: 'Database',        icon: Database },
-  { href: '/price-updates',  label: 'Price Updates',   icon: RefreshCw },
-  { href: '/staged-changes', label: 'Staged Changes',  icon: Clock, badge: true },
+  { href: '/database',           label: 'Database',          icon: Database },
+  { href: '/price-updates',      label: 'Price Updates',     icon: RefreshCw },
+  { href: '/staged-changes',     label: 'Staged Changes',    icon: Clock, badge: true },
+  { href: '/competitor-prices',  label: 'Competitor Prices', icon: BarChart2 },
 ]
 
 export function Sidebar({ stagedCount = 0 }: SidebarProps) {
