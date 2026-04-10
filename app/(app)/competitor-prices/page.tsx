@@ -79,7 +79,7 @@ function PriceCell({
   cutMyPrice: number | null
   isCutMy?: boolean
 }) {
-  const price = entry?.pricePerM2 ?? null
+  const price = isCutMy ? cutMyPrice : (entry?.pricePerM2 ?? null)
   const previous = entry?.previousPricePerM2 ?? null
   const hasComparison = price != null && cutMyPrice != null && !isCutMy
   const cheaper = hasComparison && price < cutMyPrice
