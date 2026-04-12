@@ -127,7 +127,7 @@ function parseMetabaseRow(row: Record<string, string>, supplierId: string) {
 
 function parseTemplateRow(row: Record<string, string>, supplierId: string) {
   const magentoName = row['magento_name']?.trim() || null
-  const magentoEntityIdRaw = row['magento_entity_id']?.trim() ?? ''
+  const magentoEntityIdRaw = row['magento_entity_id']?.trim().replace(/,/g, '') ?? ''
   const magentoEntityId = magentoEntityIdRaw ? parseInt(magentoEntityIdRaw, 10) : null
   const category = row['category']?.trim() || 'Accessories'
   const typeFinish = row['type_finish']?.trim() || 'Other'
