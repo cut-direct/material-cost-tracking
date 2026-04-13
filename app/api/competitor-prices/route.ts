@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import type { NextRequest } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 const PLASTIC_COMPETITORS = [
   'simply-plastics',
   'plastic-people',
@@ -85,8 +87,10 @@ export async function GET(req: NextRequest) {
           if (Number(row.rn) === 1) currentByItem[row.basket_item_id] = row
           else if (Number(row.rn) === 2) previousByItem[row.basket_item_id] = row
         }
-        // Use the most recent run_at across all items as the display timestamp
-        const latestRunAt = rows.find((r) => Number(r.rn) === 1)?.run_at ?? null
+        // Use the most recent run_at across all rn=1 rows as the display timestamp
+        const latestRunAt = rows
+          .filter((r) => Number(r.rn) === 1)
+          .reduce<Date | null>((max, r) => (!max || r.run_at > max ? r.run_at : max), null)
 
         return { slug, label: COMPETITOR_LABELS[slug], currentByItem, previousByItem, latestRunAt }
       })

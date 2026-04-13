@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { SearchInput } from '@/components/ui/SearchInput'
 
 interface BasketItem {
   id: string
@@ -56,6 +57,7 @@ function fmtDate(iso: string | null): string {
 
 function Delta({ current, previous }: { current: number | null; previous: number | null }) {
   if (current == null || previous == null) return null
+  if (previous < 5) return null  // suppress deltas from old error/garbage prices
   const diff = current - previous
   if (Math.abs(diff) < 0.01) return null
 
@@ -208,11 +210,12 @@ interface Props {
 export function CompetitorPricesView({ category }: Props) {
   const { data, isLoading, isError, refetch, isFetching } = useQuery<ApiResponse>({
     queryKey: ['competitor-prices', category],
-    queryFn: () => fetch(`/api/competitor-prices?category=${category}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/competitor-prices?category=${category}&t=${Date.now()}`).then(r => r.json()),
     staleTime: 10 * 60 * 1000,
   })
 
   const [editingItem, setEditingItem] = useState<BasketItem | null>(null)
+  const [search, setSearch] = useState('')
   const [filterMaterial, setFilterMaterial] = useState('')
   const [filterType, setFilterType] = useState('')
 
@@ -235,18 +238,21 @@ export function CompetitorPricesView({ category }: Props) {
 
   const visibleItems = useMemo(() => {
     if (!data) return []
+    const q = search.toLowerCase()
     return data.basketItems.filter(i => {
       if (filterMaterial && i.typeFinish !== filterMaterial) return false
       if (filterType && i.variantType !== filterType) return false
+      if (q && !i.name.toLowerCase().includes(q) && !(i.cutMyVariantName ?? '').toLowerCase().includes(q)) return false
       return true
     })
-  }, [data, filterMaterial, filterType])
+  }, [data, filterMaterial, filterType, search])
 
-  const hasActiveFilters = !!(filterMaterial || filterType)
+  const hasActiveFilters = !!(filterMaterial || filterType || search)
 
   function clearFilters() {
     setFilterMaterial('')
     setFilterType('')
+    setSearch('')
   }
 
   return (
@@ -268,6 +274,12 @@ export function CompetitorPricesView({ category }: Props) {
         </div>
 
         <div className="h-11 flex items-center gap-2">
+          <SearchInput
+            placeholder="Search variants…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            containerClassName="w-56"
+          />
           {materialOptions.length > 0 && (
             <select
               value={filterMaterial}
