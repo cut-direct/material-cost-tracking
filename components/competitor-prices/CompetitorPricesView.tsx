@@ -133,8 +133,8 @@ function VariantPicker({ item, onClose }: { item: BasketItem; onClose: () => voi
   const filtered = materials.filter(m => {
     const q = search.toLowerCase()
     return (
-      m.magentoName.toLowerCase().includes(q) ||
-      m.magentoSku.toLowerCase().includes(q) ||
+      (m.magentoName ?? '').toLowerCase().includes(q) ||
+      (m.magentoSku ?? '').toLowerCase().includes(q) ||
       String(m.magentoEntityId).includes(q)
     )
   })
