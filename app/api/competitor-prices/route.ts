@@ -92,32 +92,45 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    // For each basket item, get Cut My's retail price, variant name, variantType, and typeFinish
+    // Batch-fetch all mapped Cut My materials in one query, then look up in memory
+    const mappedEntityIds = basketItems
+      .map((i) => i.magentoEntityId)
+      .filter((id): id is number => id !== null)
+
+    const materials = mappedEntityIds.length
+      ? await prisma.material.findMany({
+          where: { magentoEntityId: { in: mappedEntityIds } },
+          select: {
+            magentoEntityId: true,
+            magentoName: true,
+            variantType: true,
+            typeFinish: true,
+            markupMultiplier: true,
+            costPerSheet: true,
+            widthMm: true,
+            heightMm: true,
+          },
+        })
+      : []
+
+    const materialByEntityId = new Map(materials.map((m) => [m.magentoEntityId!, m]))
+
     const cutMyPrices: Record<string, number | null> = {}
     const cutMyNames: Record<string, string | null> = {}
     const cutMyVariantTypes: Record<string, string | null> = {}
     const cutMyTypeFinishes: Record<string, string | null> = {}
     for (const item of basketItems) {
-      if (item.magentoEntityId) {
-        const material = await prisma.material.findFirst({
-          where: { magentoEntityId: item.magentoEntityId },
-        })
-        if (material && material.markupMultiplier && material.costPerSheet) {
-          const sheetAreaM2 = (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
-          const retailPerSheet = Number(material.costPerSheet) * Number(material.markupMultiplier)
-          cutMyPrices[item.id] = sheetAreaM2 > 0 ? retailPerSheet / sheetAreaM2 : null
-        } else {
-          cutMyPrices[item.id] = null
-        }
-        cutMyNames[item.id] = material?.magentoName ?? null
-        cutMyVariantTypes[item.id] = material?.variantType ?? null
-        cutMyTypeFinishes[item.id] = material?.typeFinish ?? null
+      const material = item.magentoEntityId ? materialByEntityId.get(item.magentoEntityId) : undefined
+      if (material && material.markupMultiplier && material.costPerSheet) {
+        const sheetAreaM2 = (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
+        const retailPerSheet = Number(material.costPerSheet) * Number(material.markupMultiplier)
+        cutMyPrices[item.id] = sheetAreaM2 > 0 ? retailPerSheet / sheetAreaM2 : null
       } else {
         cutMyPrices[item.id] = null
-        cutMyNames[item.id] = null
-        cutMyVariantTypes[item.id] = null
-        cutMyTypeFinishes[item.id] = null
       }
+      cutMyNames[item.id] = material?.magentoName ?? null
+      cutMyVariantTypes[item.id] = material?.variantType ?? null
+      cutMyTypeFinishes[item.id] = material?.typeFinish ?? null
     }
 
     return NextResponse.json({
