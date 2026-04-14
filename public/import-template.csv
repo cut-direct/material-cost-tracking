@@ -1,3 +1,3 @@
-magento_sku,magento_name,magento_entity_id,category,type_finish,description,thickness_mm,width_mm,height_mm,cost_per_sheet,supplier,variant_type
-12-medite-premier-mdf,12mm Medite Premier MDF,4001,Wood,MDF,12mm Medite Premier MDF,12,2440,1220,22.50,Lathams,Medite
-18-kronospan-dark-walnut-mdf,18mm Kronospan Dark Walnut MDF,4059,Wood,MDF,18mm Kronospan Dark Walnut MDF,18,2440,1220,28.75,Lathams,Kronospan
+sku,name,entity_id,category,material,variant_type,thickness,cost,cost_width,cost_length,markup_multiplier,supplier
+12-medite-premier-mdf,12mm Medite Premier MDF,4001,Wood,MDF,Medite,12,22.50,2440,1220,1.45,Lathams
+18-kronospan-dark-walnut-mdf,18mm Kronospan Dark Walnut MDF,4059,Wood,MDF,Kronospan,18,28.75,2440,1220,1.45,Lathams
