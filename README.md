@@ -1,31 +1,36 @@
 # Material Cost Tracking
 
-> Keeping an eye on competitor prices so you don't have to.
+Internal tooling for [Cut My](https://www.cutmy.co.uk) — a sheet material cutting company. Two tools in one repo:
 
-Internal tooling for [Cut My](https://www.cutmy.co.uk) — a material cost tracker and competitor price monitor for sheet materials (acrylic, wood, etc.).
+1. **Material Cost Database** — track supplier costs, parse price-update emails with AI, stage future-dated changes
+2. **Peeping Tom** — competitor price monitor dashboard (scraper lives in a [separate repo](https://github.com/perspexmilo/peeping-tom))
 
 ---
 
-## What it does
+## Material Cost Database
 
-### 1. Material Cost Database
-Track Cut My's own material costs, markup multipliers, and retail prices across the full product range. Import supplier price lists from PDFs and emails using AI parsing — no manual data entry.
+Track Cut My's own material costs, markup multipliers, and retail prices across the full product range.
 
-- Bulk import from Perspex and Lathams PDF price lists
-- AI-powered email parser for supplier price update emails
-- Staged changes workflow — review parsed updates before committing them
-- Cost history per variant with change tracking
-- Searchable, filterable material database
+- Bulk import from supplier PDF price lists (Perspex, Lathams) via AI parsing
+- AI-powered email parser for supplier price update emails — no manual data entry
+- Staged changes workflow — review AI-parsed updates before committing them
+- Full cost history per variant with change tracking
+- Searchable, filterable material database with inline editing
 
-### 2. Peeping Tom — Competitor Price Monitor
-Scrape competitor prices for equivalent products and compare them against Cut My's retail price per m².
+---
 
-- Price-per-m² comparison across 6 acrylic competitors
-- Week-on-week delta indicators — see when a competitor raises or drops their price
-- Filter by variant type (Clear / Black / White / etc.)
-- Map each basket item to a Cut My variant for direct retail price comparison
+## Peeping Tom Dashboard
+
+Surfaces competitor scrape results alongside Cut My's own retail prices for direct comparison.
+
+- Price-per-m² across 9 competitors (6 acrylic, 3 wood)
+- Week-on-week delta indicators — green up / red down with absolute and % change
+- Searchable, filterable by item name or variant
 - Average competitor price column
-- Covers 16 basket items: Clear Acrylic (2–30mm), Black Acrylic (3mm, 5mm), White Acrylic (3mm, 5mm)
+- Map each basket item to a Cut My variant for retail price comparison
+- Covers acrylic (Clear, Black, White, pastels, fluorescents) and MDF
+
+Scrape data is populated by the [Peeping Tom scraper](https://github.com/perspexmilo/peeping-tom), which runs automatically every Monday at 8am and posts results to Slack.
 
 ---
 
@@ -36,95 +41,49 @@ Scrape competitor prices for equivalent products and compare them against Cut My
 | Framework | Next.js 15 App Router |
 | Database | Supabase PostgreSQL + Prisma ORM |
 | Auth | Supabase Auth |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS + shadcn/ui |
 | Data fetching | TanStack Query v5 |
 | AI parsing | Claude (Anthropic) via API |
 | Hosting | Vercel |
-| Scraper | Playwright (separate package — see below) |
 
 ---
 
-## Repo Structure
+## Project structure
 
 ```
-material-cost-tool/         This Next.js app
-  app/
-    (app)/
-      database/             Material cost database
-      competitor-prices/    Peeping Tom dashboard
-      price-updates/        Supplier price update review tool
-      staged-changes/       Staged changes approval queue
-    api/
-      competitor-prices/    Scrape results API
-      materials/            CRUD for material records
-      parse-email/          AI email parser
-      parse-pdf-*/          AI PDF parsers (Perspex + Lathams)
-      staged-changes/       Staged update management
-  components/
-  lib/
-    ai/                     LLM parsing logic
-    db/                     Prisma query helpers
+app/
+  (app)/
+    database/             Material cost database — searchable, editable
+    competitor-prices/    Peeping Tom dashboard
+    price-updates/        Supplier email parser + context hints
+    staged-changes/       Pending future-dated changes queue
+  api/
+    materials/            CRUD + bulk-update + CSV import
+    competitor-prices/    Scrape results read API
+    parse-email/          POST — runs AI parser
+    parser-context/       GET/POST/DELETE — context hints for AI
+    staged-changes/       CRUD
+    cron/                 Vercel cron endpoint (applies staged changes daily)
+components/
+lib/
+  ai/parser.ts            Claude extraction + fuzzy material matching
+  db/                     Prisma query helpers
+prisma/
+  schema.prisma           Shared with peeping-tom scraper
+scripts/
+  run-import.mjs          Standalone bulk CSV import
 ```
-
-The **scraper** lives in a sibling directory:
-
-```
-competitor-scraper/         Playwright scraper (run locally or on a schedule)
-  src/
-    scrapers/               One file per competitor
-    index.ts                Entry point
-    seed.ts                 Basket item seeder
-  CLAUDE.md                 Full scraping rules per competitor (for AI context)
-```
-
----
-
-## Competitors Tracked (Acrylic)
-
-| Competitor | Scraper Notes |
-|---|---|
-| Simply Plastics | Standard Chromium. Colour picker via Bootstrap modal. |
-| Plastic People | Standard Chromium. React inputs need native value setter. |
-| Cut Plastic Sheeting | Standard Chromium. WooCommerce — real keystrokes required. |
-| Sheet Plastics | Stealth Chromium (Cloudflare). Price in `data-price-amount` — no interaction needed. |
-| Plastic Sheet Shop | Standard Chromium. Calls site's own `/wp-json/kps/v1/shapes/price` API directly. |
-| Plastic Sheets | Stealth Chromium (Cloudflare Turnstile). Button thickness toggle, Knockout.js inputs. |
-
----
-
-## Running the Scraper
-
-```bash
-cd competitor-scraper
-npm install
-npx playwright install chromium
-
-# Full scrape
-npm run scrape
-
-# Targeted scrapes
-npm run scrape -- --competitor simply-plastics
-npm run scrape -- --colour Black
-npm run scrape -- --colour Clear --competitor sheet-plastics
-npm run scrape -- --name "3mm"
-
-# Seed new basket items
-npx tsx src/seed.ts
-```
-
-See `competitor-scraper/CLAUDE.md` for detailed per-competitor scraping rules.
 
 ---
 
 ## Development
 
 ```bash
-cd material-cost-tool
 npm install
 npm run dev
 ```
 
-Requires a `.env.local` with:
+Requires `.env.local`:
 
 ```
 DATABASE_URL=
@@ -132,16 +91,51 @@ DIRECT_URL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ANTHROPIC_API_KEY=
+CRON_SECRET=
 ```
+
+```bash
+npx prisma db push      # sync schema to Supabase (uses DIRECT_URL)
+npx prisma generate     # regenerate client after schema changes
+npx prisma studio       # local DB browser
+node scripts/run-import.mjs <path-to-csv>   # bulk CSV import
+```
+
+---
+
+## Competitors tracked
+
+### Acrylic
+
+| Competitor | Notes |
+|---|---|
+| Simply Plastics | Standard Chromium. Colour picker via Bootstrap modal. |
+| Plastic People | Standard Chromium. React inputs need native value setter. |
+| Cut Plastic Sheeting | Standard Chromium. WooCommerce — real keystrokes required. |
+| Sheet Plastics | Stealth Chromium (Cloudflare). Price in `data-price-amount` attribute. |
+| Plastic Sheet Shop | Standard Chromium. Calls site's own REST API directly. |
+| Plastic Sheets | Stealth Chromium (Cloudflare Turnstile). Knockout.js inputs. |
+
+### Wood
+
+| Competitor | Notes |
+|---|---|
+| MDF Direct | Standard Chromium. WooCommerce + Uni CPO two-phase price stabilisation. |
+| Wood Sheets | Stealth Chromium (Cloudflare). Intercepts Magento `cuttosizeprice` REST API response. |
+| CNC Creations | Standard Chromium. WooCommerce + Uni CPO. |
+
+---
+
+## Automation
+
+The scraper runs every **Monday at 8am London time** via Google Cloud Scheduler → Cloud Run Job. After each full run, a Slack message is posted showing any price changes grouped by competitor.
+
+CI/CD: push to `master` on [peeping-tom](https://github.com/perspexmilo/peeping-tom) → GitHub Actions builds and pushes a new Docker image → Cloud Run Job updated automatically.
 
 ---
 
 ## Roadmap
 
-- [ ] Weekly cron automation for scraper
-- [ ] Wood competitors (separate page, different competitor set)
-- [ ] More coloured acrylic variants (Mirror, Opal, etc.)
-- [ ] Price drop alerts
 - [ ] Historical sparkline charts per competitor
-
-Full progress log: [`PROGRESS.md`](../../PROGRESS.md)
+- [ ] More coloured variants (Mirror, Opal, etc.)
+- [ ] Magento price push (Phase 2)
