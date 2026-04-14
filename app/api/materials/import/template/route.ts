@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 
-const TEMPLATE_CSV = `sku,name,entity_id,category,material,variant_type,thickness,cost,cost_width,cost_length,markup_multiplier,supplier
-cts-18-mdf-kronospan-white-gloss,Kronospan White Gloss 18mm MDF,10001,Wood,MDF,Kronospan,18,42.50,2440,1220,1.45,Kronospan
-cts-10-acrylic-cast-clear,Cast Clear Acrylic 10mm,10002,Plastic,Acrylic,FINSA 12Twenty,10,85.00,2050,1520,1.55,Perspex Solutions
+const TEMPLATE_CSV = `entity_id,name,sku,category,material,variant_type,thickness,cost,cost_length,cost_width,supplier
+10001,Kronospan White Gloss 18mm MDF,cts-18-mdf-kronospan-white-gloss,Wood,MDF,Kronospan,18,42.50,1220,2440,Kronospan
+10002,Cast Clear Acrylic 10mm,cts-10-acrylic-cast-clear,Plastic,Acrylic,FINSA 12Twenty,10,85.00,1520,2050,Perspex Solutions
 `
 
 export async function GET() {
