@@ -3,7 +3,7 @@
 Internal tooling for [Cut My](https://www.cutmy.co.uk) — a sheet material cutting company. Two tools in one repo:
 
 1. **Material Cost Database** — track supplier costs, parse price-update emails with AI, stage future-dated changes
-2. **Peeping Tom** — competitor price monitor dashboard (scraper lives in a [separate repo](https://github.com/perspexmilo/peeping-tom))
+2. **Peeping Tom** — competitor price monitor dashboard (scraper lives in a [separate repo](https://github.com/cut-direct/peeping-tom))
 
 ---
 
@@ -30,7 +30,7 @@ Surfaces competitor scrape results alongside Cut My's own retail prices for dire
 - Map each basket item to a Cut My variant for retail price comparison
 - Covers acrylic (Clear, Black, White, pastels, fluorescents) and MDF
 
-Scrape data is populated by the [Peeping Tom scraper](https://github.com/perspexmilo/peeping-tom), which runs automatically every Monday at 8am and posts results to Slack.
+Scrape data is populated by the [Peeping Tom scraper](https://github.com/cut-direct/peeping-tom), which runs automatically every Monday at 8am and posts results to Slack.
 
 ---
 
@@ -130,7 +130,7 @@ node scripts/run-import.mjs <path-to-csv>   # bulk CSV import
 
 The scraper runs every **Monday at 8am London time** via Google Cloud Scheduler → Cloud Run Job. After each full run, a Slack message is posted showing any price changes grouped by competitor.
 
-CI/CD: push to `master` on [peeping-tom](https://github.com/perspexmilo/peeping-tom) → GitHub Actions builds and pushes a new Docker image → Cloud Run Job updated automatically.
+CI/CD: push to `master` on [peeping-tom](https://github.com/cut-direct/peeping-tom) → GitHub Actions builds and pushes a new Docker image → Cloud Run Job updated automatically.
 
 ---
 
