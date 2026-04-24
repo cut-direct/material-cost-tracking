@@ -128,7 +128,7 @@ function PriceCell({
             </a>
           )}
         </div>
-        {!isCutMy && <Delta current={price} previous={previous} />}
+        {!isCutMy && <Delta current={rawPrice} previous={previous} />}
       </div>
     </td>
   )
