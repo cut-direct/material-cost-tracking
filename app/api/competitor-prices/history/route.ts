@@ -20,6 +20,26 @@ const COMPETITOR_LABELS: Record<string, string> = {
 
 const MDF_PLY_MFC_SLUGS = new Set(['mdf-direct', 'ply-direct', 'mfc-direct'])
 
+const PLASTIC_SLUGS = [
+  'simply-plastics',
+  'plastic-people',
+  'cut-plastic-sheeting',
+  'sheet-plastics',
+  'plastic-sheet-shop',
+  'plastic-sheets',
+]
+
+const WOOD_SLUGS = [
+  'wood-sheets',
+  'cnc-creations',
+  'plastic-people-mdf',
+  'cut-plastic-sheeting-mdf',
+  'just-mdf',
+  'mdf-direct',
+  'ply-direct',
+  'mfc-direct',
+]
+
 export async function GET(req: NextRequest) {
   const basketItemId = req.nextUrl.searchParams.get('basketItemId')
   const category = req.nextUrl.searchParams.get('category') ?? 'plastic'
@@ -27,6 +47,8 @@ export async function GET(req: NextRequest) {
   if (!basketItemId) {
     return NextResponse.json({ error: 'basketItemId required' }, { status: 400 })
   }
+
+  const allowedSlugs = category === 'wood' ? WOOD_SLUGS : PLASTIC_SLUGS
 
   // One price per competitor per day — latest run if multiple happened same day
   const rows = await prisma.$queryRaw<Array<{
@@ -46,6 +68,7 @@ export async function GET(req: NextRequest) {
       FROM competitor_prices cp
       JOIN competitor_runs cr ON cp.run_id = cr.id
       WHERE cp.basket_item_id = ${basketItemId}
+        AND cr.competitor = ANY(${allowedSlugs}::text[])
         AND cr.status IN ('success', 'partial')
         AND cp.price_per_m2 IS NOT NULL
     )
