@@ -111,6 +111,8 @@ export async function GET(req: NextRequest) {
         widthMm: true,
         heightMm: true,
         markupMultiplier: true,
+        costPerSheet: true,
+        lastUpdatedAt: true,
         costHistory: {
           orderBy: { changedAt: 'asc' },
           select: { newCost: true, changedAt: true, effectiveDate: true },
@@ -123,12 +125,20 @@ export async function GET(req: NextRequest) {
         (Number(material.widthMm) * Number(material.heightMm)) / 1_000_000
       const multiplier = Number(material.markupMultiplier)
 
-      cutMyPoints = material.costHistory
-        .filter(() => sheetAreaM2 > 0)
-        .map(h => ({
-          date: new Date(h.effectiveDate ?? h.changedAt).getTime(),
-          pricePerM2: (Number(h.newCost) * multiplier) / sheetAreaM2,
-        }))
+      if (sheetAreaM2 > 0) {
+        if (material.costHistory.length > 0) {
+          cutMyPoints = material.costHistory.map(h => ({
+            date: new Date(h.effectiveDate ?? h.changedAt).getTime(),
+            pricePerM2: (Number(h.newCost) * multiplier) / sheetAreaM2,
+          }))
+        } else {
+          // Material has never had a cost change recorded — show the current price
+          cutMyPoints = [{
+            date: new Date(material.lastUpdatedAt).getTime(),
+            pricePerM2: (Number(material.costPerSheet) * multiplier) / sheetAreaM2,
+          }]
+        }
+      }
     }
   }
 
