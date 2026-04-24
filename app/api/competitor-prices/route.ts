@@ -100,7 +100,8 @@ export async function GET(req: NextRequest) {
     const competitorData = await Promise.all(
       COMPETITORS.map(async (slug) => {
         const d = await fetchSlug(slug)
-        return { slug, label: COMPETITOR_LABELS[slug], ...d }
+        const { slug: _slug, ...rest } = d
+        return { slug, label: COMPETITOR_LABELS[slug], ...rest }
       })
     )
 
@@ -134,7 +135,8 @@ export async function GET(req: NextRequest) {
         .filter((d): d is Date => d !== null)
         .reduce<Date | null>((max, d) => (!max || d > max ? d : max), null)
 
-      competitorData.push({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(competitorData as any[]).push({
         slug: 'mdf-ply-mfc-direct',
         label: 'MDF/Ply/MFC Direct',
         currentByItem: mergedCurrentByItem,

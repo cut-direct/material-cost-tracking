@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { SearchInput } from '@/components/ui/SearchInput'
+import { CompetitorPriceHistoryModal } from './CompetitorPriceHistoryModal'
 
 interface BasketItem {
   id: string
@@ -231,6 +232,7 @@ export function CompetitorPricesView({ category }: Props) {
   })
 
   const [editingItem, setEditingItem] = useState<BasketItem | null>(null)
+  const [historyItem, setHistoryItem] = useState<BasketItem | null>(null)
   const [search, setSearch] = useState('')
   const [filterMaterial, setFilterMaterial] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -369,7 +371,11 @@ export function CompetitorPricesView({ category }: Props) {
                   ? competitorPrices.reduce((a, b) => a + b, 0) / competitorPrices.length
                   : null
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr
+                    key={item.id}
+                    className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                    onClick={() => setHistoryItem(item)}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div>
@@ -377,7 +383,7 @@ export function CompetitorPricesView({ category }: Props) {
                           <div className="text-xs text-gray-400">{item.widthMm} × {item.heightMm}mm</div>
                         </div>
                         <button
-                          onClick={() => setEditingItem(item)}
+                          onClick={e => { e.stopPropagation(); setEditingItem(item) }}
                           title="Map to Cut My variant"
                           className="ml-1 p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
                         >
@@ -420,11 +426,19 @@ export function CompetitorPricesView({ category }: Props) {
           <span className="text-green-600 font-medium">Green</span> = more expensive.
           Delta: <span className="text-green-600 font-medium">▲</span> competitor raised price,{' '}
           <span className="text-red-500 font-medium">▼</span> competitor lowered price.
-          Click <Pencil size={10} className="inline" /> to map a basket item to a Cut My variant.
+          Click <Pencil size={10} className="inline" /> to map a basket item to a Cut My variant.{' '}
+          Click any row to view competitor price history over time.
         </p>
       )}
 
       {editingItem && <VariantPicker item={editingItem} onClose={() => setEditingItem(null)} />}
+      {historyItem && (
+        <CompetitorPriceHistoryModal
+          item={historyItem}
+          category={category}
+          onClose={() => setHistoryItem(null)}
+        />
+      )}
     </div>
   )
 }
