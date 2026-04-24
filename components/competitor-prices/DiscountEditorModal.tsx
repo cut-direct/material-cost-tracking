@@ -6,7 +6,8 @@ import { useState } from 'react'
 interface Props {
   category: 'plastic' | 'wood'
   discountMap: Record<string, number>
-  onSave: (map: Record<string, number>) => void
+  notesMap: Record<string, string>
+  onSave: (discountMap: Record<string, number>, notesMap: Record<string, string>) => void
   onClose: () => void
 }
 
@@ -29,20 +30,24 @@ const SLUG_LABELS: Record<string, string> = {
   'mdf-ply-mfc-direct':       'MDF Ply MFC Direct',
 }
 
-export function DiscountEditorModal({ category, discountMap, onSave, onClose }: Props) {
+export function DiscountEditorModal({ category, discountMap, notesMap, onSave, onClose }: Props) {
   const slugs = category === 'wood' ? WOOD_SLUGS : PLASTIC_SLUGS
 
-  const [localValues, setLocalValues] = useState<Record<string, string>>(
+  const [localPct, setLocalPct] = useState<Record<string, string>>(
     () => Object.fromEntries(slugs.map(slug => [slug, String(discountMap[slug] ?? 0)]))
+  )
+  const [localNotes, setLocalNotes] = useState<Record<string, string>>(
+    () => Object.fromEntries(slugs.map(slug => [slug, notesMap[slug] ?? '']))
   )
 
   function handleSave() {
-    const newMap = { ...discountMap }
+    const newDiscountMap = { ...discountMap }
+    const newNotesMap = { ...notesMap }
     for (const slug of slugs) {
-      const raw = localValues[slug] ?? '0'
-      newMap[slug] = Math.min(100, Math.max(0, parseFloat(raw) || 0))
+      newDiscountMap[slug] = Math.min(100, Math.max(0, parseFloat(localPct[slug] ?? '0') || 0))
+      newNotesMap[slug] = localNotes[slug] ?? ''
     }
-    onSave(newMap)
+    onSave(newDiscountMap, newNotesMap)
     onClose()
   }
 
@@ -52,7 +57,7 @@ export function DiscountEditorModal({ category, discountMap, onSave, onClose }: 
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E3]">
@@ -65,6 +70,13 @@ export function DiscountEditorModal({ category, discountMap, onSave, onClose }: 
           </button>
         </div>
 
+        {/* Column headers */}
+        <div className="grid grid-cols-[1fr_80px_1fr] gap-3 px-5 pt-3 pb-1">
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Competitor</span>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-right">Discount</span>
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Promotion notes</span>
+        </div>
+
         <div className="divide-y divide-gray-50">
           {slugs.map((slug, i) => (
             <div key={slug}>
@@ -73,22 +85,29 @@ export function DiscountEditorModal({ category, discountMap, onSave, onClose }: 
                   Competitors
                 </p>
               )}
-              <div className="flex items-center justify-between px-5 py-3 gap-4">
-                <span className={`text-sm ${slug === 'cut-my' ? 'font-semibold text-[#009FE3]' : 'text-gray-700'}`}>
+              <div className="grid grid-cols-[1fr_80px_1fr] gap-3 items-center px-5 py-2.5">
+                <span className={`text-sm truncate ${slug === 'cut-my' ? 'font-semibold text-[#009FE3]' : 'text-gray-700'}`}>
                   {SLUG_LABELS[slug] ?? slug}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 justify-end">
                   <input
                     type="number"
                     min="0"
                     max="100"
                     step="0.5"
-                    value={localValues[slug] ?? '0'}
-                    onChange={e => setLocalValues(v => ({ ...v, [slug]: e.target.value }))}
-                    className="w-16 text-right text-sm px-2 py-1 rounded-lg border border-[#E5E5E3] focus:outline-none focus:ring-2 focus:ring-[#2DBDAA]/40 focus:border-[#2DBDAA] tabular-nums"
+                    value={localPct[slug] ?? '0'}
+                    onChange={e => setLocalPct(v => ({ ...v, [slug]: e.target.value }))}
+                    className="w-14 text-right text-sm px-2 py-1 rounded-lg border border-[#E5E5E3] focus:outline-none focus:ring-2 focus:ring-[#2DBDAA]/40 focus:border-[#2DBDAA] tabular-nums"
                   />
                   <span className="text-sm text-gray-400">%</span>
                 </div>
+                <input
+                  type="text"
+                  value={localNotes[slug] ?? ''}
+                  onChange={e => setLocalNotes(v => ({ ...v, [slug]: e.target.value }))}
+                  placeholder="e.g. 5% off orders over £50"
+                  className="w-full text-sm px-2 py-1 rounded-lg border border-[#E5E5E3] focus:outline-none focus:ring-2 focus:ring-[#2DBDAA]/40 focus:border-[#2DBDAA] text-gray-700 placeholder:text-gray-300"
+                />
               </div>
             </div>
           ))}

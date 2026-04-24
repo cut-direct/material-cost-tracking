@@ -245,6 +245,10 @@ export function CompetitorPricesView({ category }: Props) {
     if (typeof window === 'undefined') return {}
     try { return JSON.parse(localStorage.getItem('discount-map') ?? '{}') } catch { return {} }
   })
+  const [notesMap, setNotesMap] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem('discount-notes') ?? '{}') } catch { return {} }
+  })
   const [discountsOn, setDiscountsOn] = useState(() =>
     typeof window !== 'undefined' && localStorage.getItem('discounts-on') === 'true'
   )
@@ -256,9 +260,11 @@ export function CompetitorPricesView({ category }: Props) {
     localStorage.setItem('discounts-on', String(next))
   }
 
-  function handleSaveDiscounts(map: Record<string, number>) {
+  function handleSaveDiscounts(map: Record<string, number>, notes: Record<string, string>) {
     setDiscountMap(map)
+    setNotesMap(notes)
     localStorage.setItem('discount-map', JSON.stringify(map))
+    localStorage.setItem('discount-notes', JSON.stringify(notes))
   }
 
   const [editingItem, setEditingItem] = useState<BasketItem | null>(null)
@@ -512,6 +518,7 @@ export function CompetitorPricesView({ category }: Props) {
         <DiscountEditorModal
           category={category}
           discountMap={discountMap}
+          notesMap={notesMap}
           onSave={handleSaveDiscounts}
           onClose={() => setShowDiscountEditor(false)}
         />
