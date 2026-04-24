@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface DiscountSetting {
   slug: string
@@ -40,7 +40,8 @@ export function DiscountEditorModal({ category, onClose }: Props) {
   const { data: settings = [], isLoading } = useQuery<DiscountSetting[]>({
     queryKey: ['discount-settings'],
     queryFn: () => fetch('/api/discount-settings').then(r => r.json()),
-    staleTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   })
 
   const slugs = category === 'wood' ? WOOD_SLUGS : PLASTIC_SLUGS
@@ -50,8 +51,11 @@ export function DiscountEditorModal({ category, onClose }: Props) {
   })
 
   const [localValues, setLocalValues] = useState<Record<string, string>>({})
+  const initialised = useRef(false)
 
   useEffect(() => {
+    if (initialised.current) return
+    initialised.current = true
     setLocalValues(Object.fromEntries(relevant.map(s => [s.slug, String(s.discountPct)])))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings])
