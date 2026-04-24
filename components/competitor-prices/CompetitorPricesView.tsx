@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { SearchInput } from '@/components/ui/SearchInput'
 
@@ -22,6 +22,7 @@ interface PriceEntry {
   pricePerM2: number | null
   previousPricePerM2: number | null
   rawValue: string | null
+  url: string | null
 }
 
 interface CompetitorData {
@@ -89,6 +90,7 @@ function PriceCell({
   const hasComparison = price != null && cutMyPrice != null && !isCutMy
   const cheaper = hasComparison && price < cutMyPrice
   const pricier = hasComparison && price > cutMyPrice
+  const url = !isCutMy ? (entry?.url ?? null) : null
 
   return (
     <td
@@ -100,7 +102,21 @@ function PriceCell({
       ].filter(Boolean).join(' ')}
     >
       <div className="flex flex-col items-end">
-        <span className="font-mono">{fmt(price)}</span>
+        <div className="flex items-center gap-1 justify-end">
+          <span className="font-mono">{fmt(price)}</span>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"
+              title="View on competitor site"
+            >
+              <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
         {!isCutMy && <Delta current={price} previous={previous} />}
       </div>
     </td>

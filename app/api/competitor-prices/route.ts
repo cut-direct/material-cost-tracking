@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
         basket_item_id: string
         price_per_m2: string | null
         raw_value: string | null
+        url: string | null
         run_at: Date
         rn: bigint
       }>>`
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
             cp.basket_item_id,
             cp.price_per_m2,
             cp.raw_value,
+            cp.url,
             cr.run_at,
             ROW_NUMBER() OVER (
               PARTITION BY cp.basket_item_id
@@ -206,6 +208,7 @@ export async function GET(req: NextRequest) {
             pricePerM2: cur?.price_per_m2 != null ? Number(cur.price_per_m2) : null,
             previousPricePerM2: prev?.price_per_m2 != null ? Number(prev.price_per_m2) : null,
             rawValue: cur?.raw_value ?? null,
+            url: cur?.url ?? null,
           }
         }),
       })),
