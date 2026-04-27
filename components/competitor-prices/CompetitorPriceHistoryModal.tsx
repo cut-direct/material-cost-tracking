@@ -237,14 +237,14 @@ export function CompetitorPriceHistoryModal({ item, category, cutMyPrice, onClos
                             <div key={key} className="flex items-center gap-2 mb-0.5">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                               <span className="text-gray-600">{p.name}</span>
-                              <span className="font-semibold text-gray-900 ml-auto pl-4">
-                                {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(cur)}/m²
-                              </span>
                               {diff != null && Math.abs(diff) >= 0.01 && (
                                 <span className={`text-[10px] font-medium ${up ? 'text-green-600' : 'text-red-500'}`}>
                                   {up ? '▲' : '▼'}{Math.abs(diff).toFixed(2)} ({Math.abs(pct!).toFixed(1)}%)
                                 </span>
                               )}
+                              <span className="font-semibold text-gray-900 ml-auto pl-4">
+                                {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(cur)}/m²
+                              </span>
                             </div>
                           )
                         })}
