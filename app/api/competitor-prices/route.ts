@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         price_per_m2: string | null
         raw_value: string | null
         url: string | null
+        screenshot_url: string | null
         run_at: Date
         rn: bigint
       }>>`
@@ -71,6 +72,7 @@ export async function GET(req: NextRequest) {
             cp.price_per_m2,
             cp.raw_value,
             cp.url,
+            cp.screenshot_url,
             cr.run_at,
             -- latest run within each calendar week
             ROW_NUMBER() OVER (
@@ -88,7 +90,7 @@ export async function GET(req: NextRequest) {
             AND cr.status IN ('success', 'partial')
             AND cp.price_per_m2 IS NOT NULL
         )
-        SELECT basket_item_id, price_per_m2, raw_value, url, run_at, rn
+        SELECT basket_item_id, price_per_m2, raw_value, url, screenshot_url, run_at, rn
         FROM ranked
         WHERE rn_within_week = 1 AND rn <= 2
         ORDER BY basket_item_id, rn
@@ -219,6 +221,7 @@ export async function GET(req: NextRequest) {
             previousPricePerM2: prev?.price_per_m2 != null ? Number(prev.price_per_m2) : null,
             rawValue: cur?.raw_value ?? null,
             url: cur?.url ?? null,
+            screenshotUrl: cur?.screenshot_url ?? null,
           }
         }),
       })),

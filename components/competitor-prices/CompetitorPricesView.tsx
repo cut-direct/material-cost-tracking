@@ -26,6 +26,7 @@ interface PriceEntry {
   previousPricePerM2: number | null
   rawValue: string | null
   url: string | null
+  screenshotUrl: string | null
 }
 
 interface CompetitorData {
@@ -84,6 +85,38 @@ function applyDiscount(price: number | null, pct: number): number | null {
   return price * (1 - pct / 100)
 }
 
+function ScreenshotLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative max-w-5xl w-full max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 z-10 bg-white/80 hover:bg-white rounded-full p-1 shadow text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <X size={16} />
+        </button>
+        <img
+          src={url}
+          alt="Competitor page screenshot"
+          className="w-full h-full object-contain max-h-[90vh]"
+        />
+      </div>
+    </div>
+  )
+}
+
 function PriceCell({
   entry,
   cutMyPrice,
@@ -95,6 +128,7 @@ function PriceCell({
   isCutMy?: boolean
   discountPct?: number
 }) {
+  const [showScreenshot, setShowScreenshot] = useState(false)
   const rawPrice = isCutMy ? cutMyPrice : (entry?.pricePerM2 ?? null)
   const price = applyDiscount(rawPrice, discountPct)
   const previous = entry?.previousPricePerM2 ?? null
@@ -102,6 +136,7 @@ function PriceCell({
   const cheaper = hasComparison && price < cutMyPrice
   const pricier = hasComparison && price > cutMyPrice
   const url = !isCutMy ? (entry?.url ?? null) : null
+  const screenshotUrl = !isCutMy ? (entry?.screenshotUrl ?? null) : null
 
   return (
     <td
@@ -127,9 +162,21 @@ function PriceCell({
               <ExternalLink size={11} />
             </a>
           )}
+          {screenshotUrl && (
+            <button
+              onClick={e => { e.stopPropagation(); setShowScreenshot(true) }}
+              className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"
+              title="View screenshot"
+            >
+              <Eye size={11} />
+            </button>
+          )}
         </div>
         {!isCutMy && <Delta current={rawPrice} previous={previous} />}
       </div>
+      {showScreenshot && screenshotUrl && (
+        <ScreenshotLightbox url={screenshotUrl} onClose={() => setShowScreenshot(false)} />
+      )}
     </td>
   )
 }
