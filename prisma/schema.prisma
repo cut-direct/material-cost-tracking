@@ -155,13 +155,14 @@ model CompetitorRun {
 }
 
 model CompetitorPrice {
-  id           String   @id @default(cuid())
-  runId        String   @map("run_id")
-  basketItemId String   @map("basket_item_id")
-  priceGbp     Decimal? @map("price_gbp") @db.Decimal(10, 2)
-  pricePerM2   Decimal? @map("price_per_m2") @db.Decimal(10, 2)
-  url          String?
-  rawValue     String?  @map("raw_value")
+  id            String   @id @default(cuid())
+  runId         String   @map("run_id")
+  basketItemId  String   @map("basket_item_id")
+  priceGbp      Decimal? @map("price_gbp") @db.Decimal(10, 2)
+  pricePerM2    Decimal? @map("price_per_m2") @db.Decimal(10, 2)
+  url           String?
+  rawValue      String?  @map("raw_value")
+  screenshotUrl String?  @map("screenshot_url")
 
   run        CompetitorRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
   basketItem CompetitorBasketItem @relation(fields: [basketItemId], references: [id])
