@@ -1,8 +1,8 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink, Settings2 } from 'lucide-react'
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink, Settings2, ChevronUp, ChevronDown, ChevronsUpDown, Eye } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { CompetitorPriceHistoryModal } from './CompetitorPriceHistoryModal'
 import { DiscountEditorModal } from './DiscountEditorModal'
@@ -235,6 +235,8 @@ interface Props {
 }
 
 export function CompetitorPricesView({ category }: Props) {
+  const queryClient = useQueryClient()
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery<ApiResponse>({
     queryKey: ['competitor-prices', category],
     queryFn: () => fetch(`/api/competitor-prices?category=${category}&t=${Date.now()}`).then(r => r.json()),
@@ -253,6 +255,47 @@ export function CompetitorPricesView({ category }: Props) {
     typeof window !== 'undefined' && localStorage.getItem('discounts-on') === 'true'
   )
   const [showDiscountEditor, setShowDiscountEditor] = useState(false)
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const columnPickerRef = useRef<HTMLDivElement>(null)
+
+  const [sortCol, setSortCol] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const [hiddenSlugs, setHiddenSlugs] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const s = localStorage.getItem('hidden-competitor-slugs')
+      return s ? new Set(JSON.parse(s)) : new Set()
+    } catch { return new Set() }
+  })
+  const [hideAvg, setHideAvg] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('hide-avg-col') === 'true'
+  )
+
+  // Load persisted discounts from DB on mount
+  const { data: dbDiscounts } = useQuery<{ slug: string; label: string; discountPct: number }[]>({
+    queryKey: ['discount-settings'],
+    queryFn: () => fetch('/api/discount-settings').then(r => r.json()),
+    staleTime: Infinity,
+  })
+
+  useEffect(() => {
+    if (!dbDiscounts?.length) return
+    const map: Record<string, number> = {}
+    for (const d of dbDiscounts) map[d.slug] = Number(d.discountPct)
+    setDiscountMap(map)
+    localStorage.setItem('discount-map', JSON.stringify(map))
+  }, [dbDiscounts])
+
+  const saveDiscountsMutation = useMutation({
+    mutationFn: (payload: { slug: string; label: string; discountPct: number }[]) =>
+      fetch('/api/discount-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['discount-settings'] }),
+  })
 
   function toggleDiscounts() {
     const next = !discountsOn
@@ -265,6 +308,51 @@ export function CompetitorPricesView({ category }: Props) {
     setNotesMap(notes)
     localStorage.setItem('discount-map', JSON.stringify(map))
     localStorage.setItem('discount-notes', JSON.stringify(notes))
+
+    const labelMap: Record<string, string> = { 'cut-my': 'Cut My' }
+    if (data) for (const c of data.competitors) labelMap[c.slug] = c.label
+    const payload = Object.entries(map).map(([slug, discountPct]) => ({
+      slug,
+      label: labelMap[slug] ?? slug,
+      discountPct,
+    }))
+    saveDiscountsMutation.mutate(payload)
+  }
+
+  useEffect(() => {
+    if (!showColumnPicker) return
+    function handleClick(e: MouseEvent) {
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node))
+        setShowColumnPicker(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showColumnPicker])
+
+  function handleSort(col: string) {
+    if (sortCol === col) {
+      if (sortDir === 'asc') setSortDir('desc')
+      else setSortCol(null)
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const toggleHiddenSlug = useCallback((slug: string) => {
+    setHiddenSlugs(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug); else next.add(slug)
+      localStorage.setItem('hidden-competitor-slugs', JSON.stringify([...next]))
+      return next
+    })
+  }, [])
+
+  function toggleHideAvg() {
+    setHideAvg(v => {
+      localStorage.setItem('hide-avg-col', String(!v))
+      return !v
+    })
   }
 
   const [editingItem, setEditingItem] = useState<BasketItem | null>(null)
@@ -300,6 +388,50 @@ export function CompetitorPricesView({ category }: Props) {
       return true
     })
   }, [data, filterMaterial, filterType, search])
+
+  const visibleCompetitors = useMemo(
+    () => data ? data.competitors.filter(c => !hiddenSlugs.has(c.slug)) : [],
+    [data, hiddenSlugs]
+  )
+
+  const sortedItems = useMemo(() => {
+    if (!sortCol || !data) return visibleItems
+    return [...visibleItems].sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1
+      if (sortCol === 'name') return dir * a.name.localeCompare(b.name)
+
+      let aVal: number | null
+      let bVal: number | null
+
+      if (sortCol === 'cut-my') {
+        const d = discountsOn ? (discountMap['cut-my'] ?? 0) : 0
+        aVal = applyDiscount(data.cutMyPrices[a.id] ?? null, d)
+        bVal = applyDiscount(data.cutMyPrices[b.id] ?? null, d)
+      } else if (sortCol === 'avg') {
+        const avg = (item: BasketItem) => {
+          const prices = data.competitors
+            .map(c => {
+              const raw = c.prices.find(p => p.basketItemId === item.id)?.pricePerM2 ?? null
+              return discountsOn ? applyDiscount(raw, discountMap[c.slug] ?? 0) : raw
+            })
+            .filter((p): p is number => p !== null)
+          return prices.length ? prices.reduce((s, p) => s + p, 0) / prices.length : null
+        }
+        aVal = avg(a); bVal = avg(b)
+      } else {
+        const comp = data.competitors.find(c => c.slug === sortCol)
+        if (!comp) return 0
+        const raw = (item: BasketItem) => comp.prices.find(p => p.basketItemId === item.id)?.pricePerM2 ?? null
+        aVal = discountsOn ? applyDiscount(raw(a), discountMap[sortCol] ?? 0) : raw(a)
+        bVal = discountsOn ? applyDiscount(raw(b), discountMap[sortCol] ?? 0) : raw(b)
+      }
+
+      if (aVal === null && bVal === null) return 0
+      if (aVal === null) return 1
+      if (bVal === null) return -1
+      return dir * (aVal - bVal)
+    })
+  }, [visibleItems, sortCol, sortDir, data, discountsOn, discountMap])
 
   const hasActiveFilters = !!(filterMaterial || filterType || search)
 
@@ -386,6 +518,71 @@ export function CompetitorPricesView({ category }: Props) {
             >
               <Settings2 size={13} />
             </button>
+
+            {/* Column visibility picker */}
+            <div className="relative" ref={columnPickerRef}>
+              <button
+                onClick={() => setShowColumnPicker(v => !v)}
+                className={[
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-colors',
+                  showColumnPicker || hiddenSlugs.size > 0 || hideAvg
+                    ? 'bg-gray-800 border-gray-800 text-white'
+                    : 'bg-white border-[#E5E5E3] text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+                title="Show / hide columns"
+              >
+                <Eye size={12} />
+                Columns{hiddenSlugs.size + (hideAvg ? 1 : 0) > 0 ? ` (${hiddenSlugs.size + (hideAvg ? 1 : 0)} hidden)` : ''}
+              </button>
+
+              {showColumnPicker && data && (
+                <div className="absolute right-0 top-full mt-1.5 z-40 bg-white border border-[#E5E5E3] rounded-xl shadow-lg p-3 min-w-[180px]">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">Columns</p>
+
+                  {/* Avg toggle */}
+                  <label className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!hideAvg}
+                      onChange={toggleHideAvg}
+                      className="accent-[#2DBDAA] w-3.5 h-3.5"
+                    />
+                    <span className="text-[12px] text-gray-700">Avg</span>
+                  </label>
+
+                  <div className="my-1.5 border-t border-gray-100" />
+
+                  {data.competitors.map(c => (
+                    <label key={c.slug} className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenSlugs.has(c.slug)}
+                        onChange={() => toggleHiddenSlug(c.slug)}
+                        className="accent-[#2DBDAA] w-3.5 h-3.5"
+                      />
+                      <span className="text-[12px] text-gray-700">{c.label}</span>
+                    </label>
+                  ))}
+
+                  {(hiddenSlugs.size > 0 || hideAvg) && (
+                    <>
+                      <div className="my-1.5 border-t border-gray-100" />
+                      <button
+                        onClick={() => {
+                          setHiddenSlugs(new Set())
+                          setHideAvg(false)
+                          localStorage.removeItem('hidden-competitor-slugs')
+                          localStorage.removeItem('hide-avg-col')
+                        }}
+                        className="w-full text-left px-1 py-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        Show all
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -402,18 +599,39 @@ export function CompetitorPricesView({ category }: Props) {
           <table className="w-full text-sm border-separate border-spacing-0">
             <thead className="sticky top-[102px] z-20">
               <tr className="bg-gray-50" style={{ boxShadow: 'inset 0 -1px 0 #E5E5E3' }}>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 text-xs uppercase tracking-wider">
-                  Variant
+                <th
+                  className="px-4 py-3 text-left font-semibold text-gray-600 text-xs uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('name')}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    Variant
+                    {sortCol === 'name' ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ChevronsUpDown size={11} className="text-gray-300" />}
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-right font-semibold text-xs uppercase tracking-wider text-[#1a8a7a] bg-[#2DBDAA]/10">
-                  Cut My
+                <th
+                  className="px-4 py-3 text-right font-semibold text-xs uppercase tracking-wider text-[#1a8a7a] bg-[#2DBDAA]/10 cursor-pointer select-none hover:bg-[#2DBDAA]/20 transition-colors"
+                  onClick={() => handleSort('cut-my')}
+                >
+                  <span className="inline-flex items-center justify-end gap-1 w-full">
+                    {sortCol === 'cut-my' ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ChevronsUpDown size={11} className="opacity-40" />}
+                    Cut My
+                  </span>
                 </th>
-                <th className="px-4 py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider bg-gray-50/80">
-                  Avg
-                </th>
-                {data.competitors.map(c => (
-                  <th key={c.slug} className="px-4 py-3 text-right font-semibold text-gray-600 text-xs uppercase tracking-wider w-[140px] min-w-[140px] bg-gray-50">
+                {!hideAvg && (
+                  <th
+                    className="px-4 py-3 text-right font-semibold text-gray-500 text-xs uppercase tracking-wider bg-gray-50/80 cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                    onClick={() => handleSort('avg')}
+                  >
+                    <span className="inline-flex items-center justify-end gap-1 w-full">
+                      {sortCol === 'avg' ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ChevronsUpDown size={11} className="text-gray-300" />}
+                      Avg
+                    </span>
+                  </th>
+                )}
+                {visibleCompetitors.map(c => (
+                  <th key={c.slug} className="px-4 py-3 text-right font-semibold text-gray-600 text-xs uppercase tracking-wider w-[140px] min-w-[140px] bg-gray-50 cursor-pointer select-none hover:bg-gray-100 transition-colors" onClick={() => handleSort(c.slug)}>
                     <div className="flex items-center justify-end gap-1">
+                      {sortCol === c.slug ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : <ChevronsUpDown size={11} className="text-gray-300" />}
                       <span>{c.label}</span>
                       {SLUG_HOMEPAGES[c.slug] && (
                         <a
@@ -427,6 +645,13 @@ export function CompetitorPricesView({ category }: Props) {
                           <ExternalLink size={10} />
                         </a>
                       )}
+                      <button
+                        onClick={e => { e.stopPropagation(); toggleHiddenSlug(c.slug) }}
+                        className="text-gray-200 hover:text-gray-500 transition-colors"
+                        title={`Hide ${c.label}`}
+                      >
+                        <X size={10} />
+                      </button>
                     </div>
                     <div className="text-[10px] font-normal text-gray-400 normal-case mt-0.5">{fmtDate(c.runAt)}</div>
                   </th>
@@ -434,7 +659,7 @@ export function CompetitorPricesView({ category }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {visibleItems.map(item => {
+              {sortedItems.map(item => {
                 const cutMyPrice = data.cutMyPrices[item.id] ?? null
                 const effectiveCutMyPrice = discountsOn
                   ? applyDiscount(cutMyPrice, discountMap['cut-my'] ?? 0)
@@ -476,10 +701,12 @@ export function CompetitorPricesView({ category }: Props) {
                       )}
                     </td>
                     <PriceCell cutMyPrice={cutMyPrice} isCutMy discountPct={discountsOn ? (discountMap['cut-my'] ?? 0) : 0} />
-                    <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-gray-500 bg-gray-50/40">
-                      {fmt(avgPrice)}
-                    </td>
-                    {data.competitors.map(c => {
+                    {!hideAvg && (
+                      <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-gray-500 bg-gray-50/40">
+                        {fmt(avgPrice)}
+                      </td>
+                    )}
+                    {visibleCompetitors.map(c => {
                       const entry = c.prices.find(x => x.basketItemId === item.id)
                       return (
                         <PriceCell
@@ -495,7 +722,7 @@ export function CompetitorPricesView({ category }: Props) {
               })}
             </tbody>
           </table>
-          {visibleItems.length === 0 && (
+          {sortedItems.length === 0 && (
             <div className="text-center py-12 text-gray-400 text-sm">
               {hasActiveFilters
                 ? 'No items matched the current filters.'
