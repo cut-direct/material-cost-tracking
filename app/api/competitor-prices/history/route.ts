@@ -78,6 +78,35 @@ export async function GET(req: NextRequest) {
     ORDER BY competitor, run_date ASC
   `
 
+  // Latest screenshot per competitor for this item
+  const screenshotRows = await prisma.$queryRaw<Array<{
+    competitor: string
+    screenshot_url: string
+    run_at: Date
+  }>>`
+    WITH ranked AS (
+      SELECT
+        cr.competitor,
+        cp.screenshot_url,
+        cr.run_at,
+        ROW_NUMBER() OVER (PARTITION BY cr.competitor ORDER BY cr.run_at DESC) AS rn
+      FROM competitor_prices cp
+      JOIN competitor_runs cr ON cp.run_id = cr.id
+      WHERE cp.basket_item_id = ${basketItemId}
+        AND cr.competitor = ANY(${allowedSlugs}::text[])
+        AND cr.status IN ('success', 'partial')
+        AND cp.screenshot_url IS NOT NULL
+    )
+    SELECT competitor, screenshot_url, run_at
+    FROM ranked
+    WHERE rn = 1
+  `
+
+  const latestScreenshots: Record<string, { url: string; runAt: string }> = {}
+  for (const r of screenshotRows) {
+    latestScreenshots[r.competitor] = { url: r.screenshot_url, runAt: r.run_at.toISOString() }
+  }
+
   // Group by competitor slug, merging mdf/ply/mfc-direct into one for wood
   const grouped = new Map<string, { label: string; points: { date: number; pricePerM2: number }[] }>()
 
@@ -100,11 +129,21 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // Merge mdf/ply/mfc screenshot: pick whichever sub-site has one
+  if (category === 'wood') {
+    const merged = ['mdf-direct', 'ply-direct', 'mfc-direct'].reduce<{ url: string; runAt: string } | null>(
+      (acc, s) => acc ?? latestScreenshots[s] ?? null,
+      null,
+    )
+    if (merged) latestScreenshots['mdf-ply-mfc-direct'] = merged
+  }
+
   return NextResponse.json({
     competitors: Array.from(grouped.entries()).map(([slug, { label, points }]) => ({
       slug,
       label,
       points,
+      screenshot: latestScreenshots[slug] ?? null,
     })),
   })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { format } from 'date-fns'
@@ -31,6 +31,7 @@ interface CompetitorHistory {
   slug: string
   label: string
   points: HistoryPoint[]
+  screenshot: { url: string; runAt: string } | null
 }
 
 interface ApiResponse {
@@ -86,6 +87,8 @@ interface Props {
 }
 
 export function CompetitorPriceHistoryModal({ item, category, cutMyPrice, onClose }: Props) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
   const { data, isLoading, isError } = useQuery<ApiResponse>({
     queryKey: ['competitor-price-history', item.id],
     queryFn: () =>
@@ -95,8 +98,11 @@ export function CompetitorPriceHistoryModal({ item, category, cutMyPrice, onClos
   })
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') onClose()
-  }, [onClose])
+    if (e.key === 'Escape') {
+      if (lightboxUrl) setLightboxUrl(null)
+      else onClose()
+    }
+  }, [onClose, lightboxUrl])
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
@@ -262,8 +268,66 @@ export function CompetitorPriceHistoryModal({ item, category, cutMyPrice, onClos
           <p className="mt-3 text-[11px] text-gray-400 text-right">
             £/m² inc VAT · {item.widthMm} × {item.heightMm}mm · weekly scrape
           </p>
+
+          {/* Screenshot thumbnails */}
+          {competitors.some(c => c.screenshot) && (
+            <div className="mt-4 border-t border-[#E5E5E3] pt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">
+                Latest screenshots
+              </p>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {competitors.filter(c => c.screenshot).map(c => (
+                  <button
+                    key={c.slug}
+                    onClick={() => setLightboxUrl(c.screenshot!.url)}
+                    className="shrink-0 group relative rounded-lg overflow-hidden border border-[#E5E5E3] hover:border-gray-400 transition-colors"
+                    style={{ width: 140 }}
+                  >
+                    <img
+                      src={c.screenshot!.url}
+                      alt={c.label}
+                      className="w-full h-20 object-cover object-top"
+                    />
+                    <div className="px-2 py-1.5 bg-white border-t border-[#E5E5E3]">
+                      <p className="text-[10px] font-semibold text-gray-700 truncate" style={{ color: slugColor(c.slug) }}>
+                        {c.label}
+                      </p>
+                      <p className="text-[9px] text-gray-400">
+                        {format(new Date(c.screenshot!.runAt), 'd MMM yyyy')}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Screenshot lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute top-2 right-2 z-10 bg-white/80 hover:bg-white rounded-full p-1 shadow text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <X size={16} />
+            </button>
+            <img
+              src={lightboxUrl}
+              alt="Competitor page screenshot"
+              className="w-full h-full object-contain max-h-[90vh]"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
