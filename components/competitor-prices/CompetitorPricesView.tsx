@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink, Settings2, ChevronUp, ChevronDown, ChevronsUpDown, Eye } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, Pencil, X, Check, ExternalLink, Settings2, ChevronUp, ChevronDown, ChevronsUpDown, Eye, Download } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { CompetitorPriceHistoryModal } from './CompetitorPriceHistoryModal'
@@ -487,6 +487,74 @@ export function CompetitorPricesView({ category }: Props) {
     setSearch('')
   }
 
+  function exportCsv() {
+    if (!data) return
+
+    // Header row
+    const cols = [
+      'Variant',
+      'Width (mm)',
+      'Height (mm)',
+      'Cut My (£/m²)',
+      ...(!hideAvg ? ['Avg (£/m²)'] : []),
+      ...visibleCompetitors.map(c => `${c.label} (£/m²)`),
+      ...visibleCompetitors.map(c => `${c.label} prev week (£/m²)`),
+    ]
+
+    const rows = sortedItems.map(item => {
+      const cutMyRaw = data.cutMyPrices[item.id] ?? null
+      const cutMy = discountsOn ? applyDiscount(cutMyRaw, discountMap['cut-my'] ?? 0) : cutMyRaw
+      const effectiveCutMy = cutMy
+
+      const compPrices = visibleCompetitors.map(c => {
+        const entry = c.prices.find(p => p.basketItemId === item.id)
+        const raw = entry?.pricePerM2 ?? null
+        return discountsOn ? applyDiscount(raw, discountMap[c.slug] ?? 0) : raw
+      })
+
+      const validPrices = compPrices.filter((p): p is number => p !== null)
+      const avg = validPrices.length
+        ? validPrices.reduce((a, b) => a + b, 0) / validPrices.length
+        : null
+
+      const prevPrices = visibleCompetitors.map(c => {
+        const entry = c.prices.find(p => p.basketItemId === item.id)
+        return entry?.previousPricePerM2 ?? null
+      })
+
+      return [
+        item.name,
+        item.widthMm,
+        item.heightMm,
+        cutMy != null ? cutMy.toFixed(2) : '',
+        ...(!hideAvg ? [avg != null ? avg.toFixed(2) : ''] : []),
+        ...compPrices.map(p => p != null ? p.toFixed(2) : ''),
+        ...prevPrices.map(p => p != null ? p.toFixed(2) : ''),
+      ]
+    })
+
+    const csvContent = [cols, ...rows]
+      .map(row => row.map(cell => {
+        const s = String(cell)
+        return s.includes(',') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"`
+          : s
+      }).join(','))
+      .join('\n')
+
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const filterLabel = filterMaterial ? `-${filterMaterial.toLowerCase().replace(/\s+/g, '-')}` : ''
+    const filename = `competitor-prices-${category}${filterLabel}-${dateStr}.csv`
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="flex flex-col">
       {/* Sticky filter bar */}
@@ -496,14 +564,25 @@ export function CompetitorPricesView({ category }: Props) {
             £/m² inc VAT · 1000 × 1000mm · delta vs previous week
             {discountsOn && <span className="ml-1.5 text-[#009FE3] font-medium">· discounts applied</span>}
           </p>
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E5E5E3] text-[12px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors bg-white"
-          >
-            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCsv}
+              disabled={!data || sortedItems.length === 0}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E5E5E3] text-[12px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors bg-white"
+              title="Export visible rows to CSV"
+            >
+              <Download size={13} />
+              Export CSV
+            </button>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E5E5E3] text-[12px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors bg-white"
+            >
+              <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="h-11 flex items-center gap-2">
